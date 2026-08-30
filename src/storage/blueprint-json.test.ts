@@ -62,4 +62,16 @@ describe("blueprint JSON", () => {
       success: true,
     });
   });
+
+  it("accepts blocks on the configured height limit", () => {
+    const blueprint = createBlueprint(
+      [{ position: { x: 0, y: 31, z: 0 }, block: "stone" }],
+      { id: "tower", name: "Tower" },
+    );
+
+    expect(parseBlueprintJson(
+      serializeBlueprintJson(blueprint),
+      createArenaConfig(51, 31),
+    )).toMatchObject({ success: true });
+  });
 });

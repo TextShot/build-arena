@@ -108,6 +108,7 @@ body::before {
 button, input { font: inherit; }
 
 .odd-slider { width: 100%; accent-color: var(--accent); }
+.slider-stack { display: grid; gap: 0.8rem; }
 
 button {
   min-height: 2.65rem;

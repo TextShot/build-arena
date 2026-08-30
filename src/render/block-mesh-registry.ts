@@ -11,10 +11,10 @@ import {
 
 import type { Block } from "../core/block-types";
 import { PHASE_A_BLOCK_IDS, type BlockId } from "../core/block-types";
-import { MAX_PLATFORM_SIZE } from "../core/arena-config";
+import { DEFAULT_MAX_BATCH_EDITS } from "../core/arena-config";
 import type { Coordinate } from "../core/coordinates";
 
-const MAX_BUILD_BLOCKS = MAX_PLATFORM_SIZE * MAX_PLATFORM_SIZE * 6;
+const INITIAL_MESH_CAPACITY = DEFAULT_MAX_BATCH_EDITS;
 
 const BLOCK_MATERIALS: Record<BlockId, MeshStandardMaterialParameters> = {
   dirt: { color: 0x8b5a35, roughness: 0.96, metalness: 0 },
@@ -37,7 +37,9 @@ export class BlockMeshRegistry {
   readonly group = new Group();
 
   private readonly geometry = new BoxGeometry(0.94, 0.94, 0.94);
+  private readonly materials = new Map<BlockId, MeshStandardMaterial>();
   private readonly meshes = new Map<BlockId, InstancedMesh>();
+  private readonly capacities = new Map<BlockId, number>();
   private readonly coordinates = new Map<InstancedMesh, readonly Coordinate[]>();
   private readonly matrix = new Matrix4();
 
@@ -46,13 +48,8 @@ export class BlockMeshRegistry {
 
     for (const blockId of PHASE_A_BLOCK_IDS) {
       const material = new MeshStandardMaterial(BLOCK_MATERIALS[blockId]);
-      const mesh = new InstancedMesh(this.geometry, material, MAX_BUILD_BLOCKS);
-      mesh.name = `blocks-${blockId}`;
-      mesh.count = 0;
-      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-      this.meshes.set(blockId, mesh);
-      this.coordinates.set(mesh, Object.freeze([]));
-      this.group.add(mesh);
+      this.materials.set(blockId, material);
+      this.createMesh(blockId, INITIAL_MESH_CAPACITY);
     }
   }
 
@@ -66,9 +63,17 @@ export class BlockMeshRegistry {
     for (const block of blocks) grouped.get(block.block)?.push(block);
 
     for (const blockId of PHASE_A_BLOCK_IDS) {
-      const mesh = this.meshes.get(blockId);
+      let mesh = this.meshes.get(blockId);
       const matchingBlocks = grouped.get(blockId);
       if (!mesh || !matchingBlocks) continue;
+
+      const capacity = this.capacities.get(blockId) ?? 0;
+      if (matchingBlocks.length > capacity) {
+        this.group.remove(mesh);
+        this.coordinates.delete(mesh);
+        mesh.dispose();
+        mesh = this.createMesh(blockId, nextCapacity(matchingBlocks.length));
+      }
 
       const positions = matchingBlocks.map(({ position }) => Object.freeze({ ...position }));
       for (let index = 0; index < positions.length; index += 1) {
@@ -83,19 +88,39 @@ export class BlockMeshRegistry {
     }
   }
 
+  private createMesh(blockId: BlockId, capacity: number): InstancedMesh {
+    const material = this.materials.get(blockId);
+    if (!material) throw new Error(`Missing material for ${blockId}`);
+    const mesh = new InstancedMesh(this.geometry, material, capacity);
+    mesh.name = `blocks-${blockId}`;
+    mesh.count = 0;
+    mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.meshes.set(blockId, mesh);
+    this.capacities.set(blockId, capacity);
+    this.coordinates.set(mesh, Object.freeze([]));
+    this.group.add(mesh);
+    return mesh;
+  }
+
   coordinateFor(object: Object3D, instanceId: number | undefined): Coordinate | null {
     if (!(object instanceof InstancedMesh) || instanceId === undefined) return null;
     return this.coordinates.get(object)?.[instanceId] ?? null;
   }
 
   dispose(): void {
-    for (const mesh of this.meshes.values()) {
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const material of materials) material.dispose();
-    }
+    for (const mesh of this.meshes.values()) mesh.dispose();
+    for (const material of this.materials.values()) material.dispose();
     this.geometry.dispose();
+    this.materials.clear();
     this.meshes.clear();
+    this.capacities.clear();
     this.coordinates.clear();
     this.group.clear();
   }
+}
+
+function nextCapacity(required: number): number {
+  let capacity = INITIAL_MESH_CAPACITY;
+  while (capacity < required) capacity *= 2;
+  return capacity;
 }

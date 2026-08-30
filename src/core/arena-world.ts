@@ -1,5 +1,5 @@
 import type { ArenaConfig } from "./arena-config";
-import { createArenaConfig, DEFAULT_ARENA_CONFIG, DEFAULT_MAX_BATCH_EDITS, DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT } from "./arena-config";
+import { createArenaConfig, DEFAULT_ARENA_CONFIG, DEFAULT_MAX_BATCH_EDITS, DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT, platformSizeForConfig } from "./arena-config";
 import type { ArenaChange, ArenaContext, ArenaEngine, ArenaResult, BlockQuery, BuildSlice, BuildSummary, SliceQuery } from "./arena-engine";
 import type { BlockId } from "./block-types";
 import { PHASE_A_BLOCK_IDS } from "./block-types";
@@ -10,8 +10,8 @@ import { getSlice, getSummary, queryBlocks, snapshotBlocks, type QueryWorld } fr
 
 type SparseArenaWorld = MutableArenaWorld & QueryWorld;
 
-export function createArenaEngine(): ArenaEngine {
-  let config: ArenaConfig = DEFAULT_ARENA_CONFIG;
+export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CONFIG): ArenaEngine {
+  let config: ArenaConfig = initialConfig;
   const blocks = new Map<CoordinateKey, BlockId>();
   let revision = 0;
   const history = new HistoryManager();
@@ -33,6 +33,72 @@ export function createArenaEngine(): ArenaEngine {
         block,
       }));
     },
+  };
+
+  const resizeArena = (
+    nextConfig: ArenaConfig,
+    fieldPath: "platformSize" | "buildHeight",
+    commandType: "resize_platform" | "resize_height",
+    destructiveError: string,
+  ): ArenaResult => {
+    if (
+      nextConfig.minX === config.minX &&
+      nextConfig.maxX === config.maxX &&
+      nextConfig.maxY === config.maxY &&
+      nextConfig.minZ === config.minZ &&
+      nextConfig.maxZ === config.maxZ
+    ) {
+      return {
+        success: true,
+        revision,
+        affectedBlocks: 0,
+        affectedBounds: null,
+        warnings: Object.freeze([]),
+        undoId: null,
+      };
+    }
+    for (const { position } of world.entries()) {
+      if (
+        position.x < nextConfig.minX || position.x > nextConfig.maxX ||
+        position.y < nextConfig.minY || position.y > nextConfig.maxY ||
+        position.z < nextConfig.minZ || position.z > nextConfig.maxZ
+      ) {
+        return { success: false, revision, error: destructiveError, fieldPath };
+      }
+    }
+    const isShrinking = nextConfig.maxX < config.maxX ||
+      nextConfig.maxY < config.maxY ||
+      nextConfig.maxZ < config.maxZ;
+    config = nextConfig;
+    if (isShrinking) history.clear();
+    revision += 1;
+    const affectedBounds = Object.freeze({
+      min: Object.freeze({ x: config.minX, y: config.minY, z: config.minZ }),
+      max: Object.freeze({ x: config.maxX, y: config.maxY, z: config.maxZ }),
+    });
+    const event: ArenaChange = Object.freeze({
+      revision,
+      commandType,
+      affectedBlocks: 0,
+      affectedBounds,
+      changes: Object.freeze([]),
+      undoId: null,
+    });
+    for (const listener of listeners) {
+      try {
+        listener(event);
+      } catch {
+        // A subscriber cannot make a committed core mutation fail.
+      }
+    }
+    return {
+      success: true,
+      revision,
+      affectedBlocks: 0,
+      affectedBounds,
+      warnings: Object.freeze([]),
+      undoId: null,
+    };
   };
 
   const engine: ArenaEngine = {
@@ -61,9 +127,13 @@ export function createArenaEngine(): ArenaEngine {
       return execution.result;
     },
     resizePlatform(platformSize): ArenaResult {
-      let nextConfig: ArenaConfig;
       try {
-        nextConfig = createArenaConfig(platformSize);
+        return resizeArena(
+          createArenaConfig(platformSize, config.maxY),
+          "platformSize",
+          "resize_platform",
+          "Platform cannot shrink around existing blocks",
+        );
       } catch (error) {
         return {
           success: false,
@@ -72,64 +142,23 @@ export function createArenaEngine(): ArenaEngine {
           fieldPath: "platformSize",
         };
       }
-      if (
-        nextConfig.minX === config.minX &&
-        nextConfig.maxX === config.maxX &&
-        nextConfig.minZ === config.minZ &&
-        nextConfig.maxZ === config.maxZ
-      ) {
+    },
+    resizeHeight(buildHeight): ArenaResult {
+      try {
+        return resizeArena(
+          createArenaConfig(platformSizeForConfig(config), buildHeight),
+          "buildHeight",
+          "resize_height",
+          "Height cannot shrink around existing blocks",
+        );
+      } catch (error) {
         return {
-          success: true,
+          success: false,
           revision,
-          affectedBlocks: 0,
-          affectedBounds: null,
-          warnings: Object.freeze([]),
-          undoId: null,
+          error: error instanceof Error ? error.message : "Invalid build height",
+          fieldPath: "buildHeight",
         };
       }
-      for (const { position } of world.entries()) {
-        if (
-          position.x < nextConfig.minX || position.x > nextConfig.maxX ||
-          position.z < nextConfig.minZ || position.z > nextConfig.maxZ
-        ) {
-          return {
-            success: false,
-            revision,
-            error: "Platform cannot shrink around existing blocks",
-            fieldPath: "platformSize",
-          };
-        }
-      }
-      config = nextConfig;
-      history.clear();
-      revision += 1;
-      const affectedBounds = Object.freeze({
-        min: Object.freeze({ x: config.minX, y: config.minY, z: config.minZ }),
-        max: Object.freeze({ x: config.maxX, y: config.maxY, z: config.maxZ }),
-      });
-      const event: ArenaChange = Object.freeze({
-        revision,
-        commandType: "resize_platform",
-        affectedBlocks: 0,
-        affectedBounds,
-        changes: Object.freeze([]),
-        undoId: null,
-      });
-      for (const listener of listeners) {
-        try {
-          listener(event);
-        } catch {
-          // A subscriber cannot make a committed core mutation fail.
-        }
-      }
-      return {
-        success: true,
-        revision,
-        affectedBlocks: 0,
-        affectedBounds,
-        warnings: Object.freeze([]),
-        undoId: null,
-      };
     },
     getContext(): ArenaContext {
       return Object.freeze({

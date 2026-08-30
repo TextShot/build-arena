@@ -11,6 +11,7 @@ function pickUiState(store: UiStore): UiState {
     activeSidebarPanel: store.activeSidebarPanel,
     jsonMode: store.jsonMode,
     platformSize: store.platformSize,
+    buildHeight: store.buildHeight,
   };
 }
 
@@ -27,7 +28,8 @@ describe("useUiStore", () => {
       sidebarCollapsed: false,
       activeSidebarPanel: "layers",
       jsonMode: false,
-      platformSize: 7,
+      platformSize: 51,
+      buildHeight: 31,
     });
     expect(pickUiState(useUiStore.getState())).toEqual(DEFAULT_UI_STATE);
   });
@@ -43,6 +45,7 @@ describe("useUiStore", () => {
     getState().setActiveSidebarPanel("slider");
     getState().setJsonMode(true);
     getState().setPlatformSize(8);
+    getState().setBuildHeight(8);
 
     expect(pickUiState(getState())).toEqual({
       selectedBlock: "oak_planks",
@@ -52,10 +55,13 @@ describe("useUiStore", () => {
       activeSidebarPanel: "slider",
       jsonMode: true,
       platformSize: 9,
+      buildHeight: 9,
     });
 
     getState().setPlatformSize(102);
     expect(getState().platformSize).toBe(101);
+    getState().setBuildHeight(32);
+    expect(getState().buildHeight).toBe(31);
   });
 
   it("restores defaults with resetUiState", () => {
@@ -68,6 +74,7 @@ describe("useUiStore", () => {
     getState().setActiveSidebarPanel("activity");
     getState().setJsonMode(true);
     getState().setPlatformSize(3);
+    getState().setBuildHeight(7);
     getState().resetUiState();
 
     expect(pickUiState(getState())).toEqual(DEFAULT_UI_STATE);

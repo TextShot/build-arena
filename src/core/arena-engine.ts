@@ -147,7 +147,7 @@ export type BlockChange = Readonly<{
 export type ArenaChange = Readonly<{
   /** Emitted only after a committed, non-no-op mutation. */
   revision: number;
-  commandType: ArenaCommand["type"] | "resize_platform";
+  commandType: ArenaCommand["type"] | "resize_platform" | "resize_height";
   affectedBlocks: number;
   affectedBounds: Bounds | null;
   changes: readonly BlockChange[];
@@ -159,6 +159,7 @@ export type ArenaChangeListener = (change: ArenaChange) => void;
 export interface ArenaEngine {
   apply(command: ArenaCommand): ArenaResult;
   resizePlatform(platformSize: number): ArenaResult;
+  resizeHeight(buildHeight: number): ArenaResult;
   getContext(): ArenaContext;
   getSummary(): BuildSummary;
   snapshotBlocks(): readonly Block[];

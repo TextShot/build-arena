@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
-import { MAX_PLATFORM_SIZE } from "../core/arena-config";
+import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
 import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
@@ -30,7 +30,7 @@ const CAMERA_PRESETS: readonly CameraPreset[] = ["iso", "top", "front", "right"]
 const SIDEBAR_PANELS: readonly SidebarPanel[] = ["layers", "activity", "slider"];
 
 export function BuildArenaPage() {
-  const [engine] = useState(() => createArenaEngine());
+  const [engine] = useState(() => createArenaEngine(createArenaConfig(51, 31)));
   const [summary, setSummary] = useState<BuildSummary>(() => engine.getSummary());
   const [activity, setActivity] = useState<readonly ActivityEntry[]>(() => [
     {
@@ -45,7 +45,7 @@ export function BuildArenaPage() {
   ]);
   const [jsonDraft, setJsonDraft] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Click place \ndouble-click remove\nRight-click select");
+  const [statusMessage, setStatusMessage] = useState("Click place \ndouble-click select\nRight-click remove");
   const nextActivityId = useRef(1);
   const rendererHost = useRef<HTMLDivElement>(null);
   const rendererInstance = useRef<ArenaRenderer | null>(null);
@@ -57,10 +57,12 @@ export function BuildArenaPage() {
   const activeSidebarPanel = useUiStore((state) => state.activeSidebarPanel);
   const jsonMode = useUiStore((state) => state.jsonMode);
   const platformSize = useUiStore((state) => state.platformSize);
+  const buildHeight = useUiStore((state) => state.buildHeight);
   const setSelectedBlock = useUiStore((state) => state.setSelectedBlock);
   const setActiveSidebarPanel = useUiStore((state) => state.setActiveSidebarPanel);
   const setJsonMode = useUiStore((state) => state.setJsonMode);
   const setPlatformSize = useUiStore((state) => state.setPlatformSize);
+  const setBuildHeight = useUiStore((state) => state.setBuildHeight);
   const setCameraPreset = useUiStore((state) => state.setCameraPreset);
 
   const addActivity = useCallback((entry: Omit<ActivityEntry, "id" | "time">) => {
@@ -219,6 +221,19 @@ export function BuildArenaPage() {
       return;
     }
     setPlatformSize(nextSize);
+    const selected = useUiStore.getState().selectedCoordinate;
+    if (selected && !isInsideArena(selected, engine)) {
+      useUiStore.getState().setSelectedCoordinate(null);
+    }
+  };
+
+  const resizeHeight = (nextHeight: number) => {
+    const result = engine.resizeHeight(nextHeight);
+    if (!result.success) {
+      handleResult(result, "height.resize", JSON.stringify({ height: nextHeight }));
+      return;
+    }
+    setBuildHeight(nextHeight);
     const selected = useUiStore.getState().selectedCoordinate;
     if (selected && !isInsideArena(selected, engine)) {
       useUiStore.getState().setSelectedCoordinate(null);
@@ -430,10 +445,20 @@ export function BuildArenaPage() {
                 )}
 
                 {activeSidebarPanel === "slider" && (
-                  <section aria-label="Platform size">
+                  <section aria-label="Arena dimensions" className="slider-stack">
                     <OddSlider
+                      ariaLabel="Platform width"
+                      max={MAX_PLATFORM_SIZE}
+                      min={7}
                       onChange={resizePlatform}
                       value={platformSize}
+                    />
+                    <OddSlider
+                      ariaLabel="Build height"
+                      max={MAX_BUILD_HEIGHT}
+                      min={7}
+                      onChange={resizeHeight}
+                      value={buildHeight}
                     />
                   </section>
                 )}
@@ -500,18 +525,24 @@ function JsonPane({
 }
 
 function OddSlider({
+  ariaLabel,
+  max,
+  min,
   value,
   onChange,
 }: {
+  ariaLabel: string;
+  max: number;
+  min: number;
   value: number;
   onChange: (value: number) => void;
 }) {
   return (
     <input
-      aria-label="Platform size"
+      aria-label={ariaLabel}
       className="odd-slider"
-      max={MAX_PLATFORM_SIZE}
-      min={7}
+      max={max}
+      min={min}
       onChange={(event) => onChange(Number(event.target.value))}
       step={2}
       type="range"

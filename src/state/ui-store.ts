@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { BlockId } from "../core/block-types";
 import type { Coordinate } from "../core/coordinates";
-import { MAX_PLATFORM_SIZE, MIN_PLATFORM_SIZE } from "../core/arena-config";
+import { MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE, MIN_PLATFORM_SIZE } from "../core/arena-config";
 
 export type CameraPreset = "iso" | "top" | "front" | "right";
 export type SidebarPanel = "layers" | "activity" | "slider";
@@ -18,6 +18,8 @@ export type UiState = Readonly<{
   jsonMode: boolean;
   /** Odd square platform width shared by X and Z. */
   platformSize: number;
+  /** Highest buildable Y layer. */
+  buildHeight: number;
 }>;
 
 export type UiActions = Readonly<{
@@ -28,6 +30,7 @@ export type UiActions = Readonly<{
   setActiveSidebarPanel: (activeSidebarPanel: SidebarPanel) => void;
   setJsonMode: (jsonMode: boolean) => void;
   setPlatformSize: (platformSize: number) => void;
+  setBuildHeight: (buildHeight: number) => void;
   resetUiState: () => void;
 }>;
 
@@ -40,7 +43,8 @@ export const DEFAULT_UI_STATE: UiState = Object.freeze({
   sidebarCollapsed: false,
   activeSidebarPanel: "layers",
   jsonMode: false,
-  platformSize: 7,
+  platformSize: 51,
+  buildHeight: 31,
 });
 
 function readPersistedCollapsed(): boolean {
@@ -62,10 +66,10 @@ function persistCollapsed(sidebarCollapsed: boolean): void {
   }
 }
 
-function snapOdd(value: number): number {
+function snapOdd(value: number, minimum: number, maximum: number): number {
   const rounded = Math.round(value);
   const odd = rounded % 2 === 0 ? rounded + 1 : rounded;
-  return Math.min(MAX_PLATFORM_SIZE, Math.max(MIN_PLATFORM_SIZE, odd));
+  return Math.min(maximum, Math.max(minimum, odd));
 }
 
 function copyCoordinate(coordinate: Coordinate | null): Coordinate | null {
@@ -89,7 +93,12 @@ export const useUiStore = create<UiStore>()((set) => ({
   },
   setActiveSidebarPanel: (activeSidebarPanel) => set({ activeSidebarPanel }),
   setJsonMode: (jsonMode) => set({ jsonMode }),
-  setPlatformSize: (platformSize) => set({ platformSize: snapOdd(platformSize) }),
+  setPlatformSize: (platformSize) => set({
+    platformSize: snapOdd(platformSize, MIN_PLATFORM_SIZE, MAX_PLATFORM_SIZE),
+  }),
+  setBuildHeight: (buildHeight) => set({
+    buildHeight: snapOdd(buildHeight, 7, MAX_BUILD_HEIGHT),
+  }),
   resetUiState: () => {
     persistCollapsed(DEFAULT_UI_STATE.sidebarCollapsed);
     set({ ...DEFAULT_UI_STATE });

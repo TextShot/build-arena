@@ -85,7 +85,7 @@ export class ArenaRenderer {
     this.renderer.domElement.setAttribute("role", "img");
     this.renderer.domElement.setAttribute(
       "aria-label",
-      "Interactive three-dimensional Build Arena. Left-click places, including on top of a block. Double-click removes. Right-click selects.",
+      "Interactive three-dimensional Build Arena. Left-click places, including on top of a block. Double-click selects. Right-click removes.",
     );
     this.container.append(this.renderer.domElement);
 
@@ -111,6 +111,7 @@ export class ArenaRenderer {
     this.resizeObserver.observe(this.container);
     this.unsubscribe = this.engine.subscribe((change) => {
       if (change.commandType === "resize_platform") this.refreshPlatform();
+      else if (change.commandType === "resize_height") this.invalidate();
       else this.refreshBlocks();
     });
 
@@ -186,7 +187,7 @@ export class ArenaRenderer {
     if (!cell) return;
     if (event.button === 2) {
       this.lastLeftClick = null;
-      this.options.onSelect(cell.hit);
+      this.options.onRemove(cell.hit);
       return;
     }
 
@@ -194,8 +195,7 @@ export class ArenaRenderer {
     const previous = this.lastLeftClick;
     if (previous && now - previous.at < DOUBLE_CLICK_MS && sameCell(previous.hit, cell.hit)) {
       this.lastLeftClick = null;
-      this.options.onRemove(cell.hit);
-      if (!sameCell(previous.placed, cell.hit)) this.options.onRemove(previous.placed);
+      this.options.onSelect(cell.hit);
       return;
     }
 

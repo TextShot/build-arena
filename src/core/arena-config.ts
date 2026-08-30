@@ -22,8 +22,9 @@ export type ArenaConfig = Readonly<{
 
 export const MIN_PLATFORM_SIZE = 3;
 export const MAX_PLATFORM_SIZE = 101;
+export const MAX_BUILD_HEIGHT = 31;
 
-export function createArenaConfig(platformSize: number): ArenaConfig {
+export function createArenaConfig(platformSize: number, buildHeight = 6): ArenaConfig {
   if (
     !Number.isSafeInteger(platformSize) ||
     platformSize < MIN_PLATFORM_SIZE ||
@@ -32,12 +33,15 @@ export function createArenaConfig(platformSize: number): ArenaConfig {
   ) {
     throw new RangeError(`platformSize must be an odd integer from ${MIN_PLATFORM_SIZE} to ${MAX_PLATFORM_SIZE}`);
   }
+  if (!Number.isSafeInteger(buildHeight) || buildHeight < 1 || buildHeight > MAX_BUILD_HEIGHT) {
+    throw new RangeError(`buildHeight must be an integer from 1 to ${MAX_BUILD_HEIGHT}`);
+  }
   const radius = (platformSize - 1) / 2;
   return Object.freeze({
     minX: -radius,
     maxX: radius,
     minY: 0,
-    maxY: 6,
+    maxY: buildHeight,
     minZ: -radius,
     maxZ: radius,
     platformY: 0,

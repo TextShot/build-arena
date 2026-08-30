@@ -1,5 +1,5 @@
 import { PHASE_A_BLOCK_IDS } from "../core/block-types";
-import { MAX_PLATFORM_SIZE } from "../core/arena-config";
+import { MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
 
 const MAX_PLATFORM_RADIUS = (MAX_PLATFORM_SIZE - 1) / 2;
 
@@ -9,7 +9,7 @@ const buildPosition = {
   required: ["x", "y", "z"],
   properties: {
     x: { type: "integer", minimum: -MAX_PLATFORM_RADIUS, maximum: MAX_PLATFORM_RADIUS },
-    y: { type: "integer", minimum: 0, maximum: 6 },
+    y: { type: "integer", minimum: 0, maximum: MAX_BUILD_HEIGHT },
     z: { type: "integer", minimum: -MAX_PLATFORM_RADIUS, maximum: MAX_PLATFORM_RADIUS },
   },
 } as const;
@@ -43,7 +43,7 @@ export const BLUEPRINT_V1_SCHEMA = {
       required: ["x", "y", "z"],
       properties: {
         x: { type: "integer", minimum: 0, maximum: MAX_PLATFORM_SIZE },
-        y: { type: "integer", minimum: 0, maximum: 6 },
+        y: { type: "integer", minimum: 0, maximum: MAX_BUILD_HEIGHT },
         z: { type: "integer", minimum: 0, maximum: MAX_PLATFORM_SIZE },
       },
     },
@@ -55,7 +55,7 @@ export const BLUEPRINT_V1_SCHEMA = {
     },
     blocks: {
       type: "array",
-      maxItems: MAX_PLATFORM_SIZE * MAX_PLATFORM_SIZE * 6,
+      maxItems: MAX_PLATFORM_SIZE * MAX_PLATFORM_SIZE * MAX_BUILD_HEIGHT,
       items: {
         type: "object",
         additionalProperties: false,
