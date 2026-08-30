@@ -7,7 +7,7 @@ import questionMarkIcon from "../assets/svg/question-mark.svg";
 import clearIcon from "../assets/svg/clear.svg";
 import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
 import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
-import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
+import { createBlueprint } from "../core/blueprint";
 import { defaultStateFor, rotateFacing, type BlockId, type BlockState } from "../core/block-types";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
@@ -259,6 +259,7 @@ export function BuildArenaPage() {
       return;
     }
     useUiStore.getState().setSelectedCoordinate(null);
+    useUiStore.getState().setJsonMode(false);
     setStatusMessage(
       result.affectedBlocks === 0 ? "Nothing to clear" : `Cleared ${result.affectedBlocks} blocks`,
     );
@@ -406,26 +407,12 @@ export function BuildArenaPage() {
       return;
     }
     setJsonError(null);
-    const edits = diffBlueprintBlocks(currentBlocks, parsed.blueprint.blocks);
-    const maxBatchEdits = engine.getContext().limits.maxBatchEdits;
-    if (edits.length > maxBatchEdits) {
-      const error = `Blueprint needs ${edits.length} edits; the maximum is ${maxBatchEdits}`;
-      setJsonError(error);
-      addActivity({
-        actor: "you",
-        name: "json.validate",
-        success: false,
-        revision: summary.revision,
-        payload: JSON.stringify({ error }),
-      });
-      return;
-    }
     const result = engine.apply({
-      type: "set_blocks",
+      type: "replace_all_blocks",
       expectedRevision: engine.getContext().revision,
-      edits,
+      blocks: parsed.blueprint.blocks,
     });
-    handleResult(result, "json.apply", JSON.stringify({ edits: edits.length }));
+    handleResult(result, "json.apply", JSON.stringify({ blocks: parsed.blueprint.blocks.length }));
     if (result.success) useUiStore.getState().setJsonMode(false);
   };
 
@@ -435,6 +422,7 @@ export function BuildArenaPage() {
     try {
       setJsonDraft(await file.text());
       setJsonError(null);
+      useUiStore.getState().setSidebarCollapsed(false);
       useUiStore.getState().setJsonMode(true);
       setStatusMessage("Blueprint loaded. Review and validate it before applying.");
     } catch {

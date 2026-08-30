@@ -16,6 +16,8 @@ export class World {
     this.canvas = canvas;
     this.blocks = new Map();
     this.meshes = new Map();
+    this.blockRevisions = new Map();
+    this.nextBlockRevision = 1;
     this.displayLampKeys = new Set();
     this.power  = new Map();
     this.particles = [];
@@ -98,6 +100,10 @@ export class World {
   }
 
   locked(){ return this.controls.isLocked || this.fallbackActive; }
+
+  _markBlockChanged(k) {
+    this.blockRevisions.set(k, this.nextBlockRevision++);
+  }
 
   _activateFallback() {
     if (this.controls.isLocked || this.fallbackActive) return;
@@ -234,6 +240,7 @@ export class World {
       if (def.comparator) data.mode = opts.mode==='subtract' ? 'subtract' : 'compare';
     }
     this.blocks.set(k, data);
+    this._markBlockChanged(k);
     const mesh = this._build(id);
     const yo = def.wire ? y-0.47 : (def.repeater||def.comparator) ? y-0.42 : (id==='button'? y-0.44 : y);
     mesh.position.set(x, yo, z);
@@ -252,6 +259,7 @@ export class World {
     const def = BLOCKS[b.id]; if (!def.repeater && !def.comparator) return;
     const order = ['E','S','W','N'];
     b.facing = order[(order.indexOf(b.facing||'E')+1)%4];
+    this._markBlockChanged(key(x,y,z));
     const m = this.meshes.get(key(x,y,z)); if (m) m.rotation.y = FACE_ANGLE[b.facing];
     this.refresh();
   }
@@ -260,6 +268,7 @@ export class World {
   toggleMode(x, y, z) {
     const b = this.blocks.get(key(x,y,z)); if (!b || !BLOCKS[b.id].comparator) return;
     b.mode = b.mode==='subtract' ? 'compare' : 'subtract';
+    this._markBlockChanged(key(x,y,z));
     this.refresh();
   }
 
@@ -267,7 +276,7 @@ export class World {
     const k = key(x,y,z);
     const b = this.blocks.get(k); if (!b) return false;
     this._spawnParticles(x, y, z, BLOCKS[b.id].color, 12);
-    this.blocks.delete(k); this._removeMesh(k); this.refresh();
+    this.blocks.delete(k); this._markBlockChanged(k); this._removeMesh(k); this.refresh();
     return true;
   }
 
@@ -288,7 +297,7 @@ export class World {
     if (m){ this.scene.remove(m); this.meshes.delete(k); }
   }
 
-  clear(){ for (const k of [...this.blocks.keys()]){ this.blocks.delete(k); this._removeMesh(k);} this.refresh(); }
+  clear(){ for (const k of [...this.blocks.keys()]){ this.blocks.delete(k); this._markBlockChanged(k); this._removeMesh(k);} this.refresh(); }
 
   _spawnParticles(x, y, z, color, n) {
     const geo = new THREE.BoxGeometry(0.12,0.12,0.12);

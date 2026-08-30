@@ -4,9 +4,10 @@ import { BLOCKS, HOTBAR_IDS, heldHotbarLabel, hotbarSlotForDigit } from "./block
 import { registerPlaySpaceTools } from "./ai.js";
 import { iconCanvas } from "./textures.js";
 import { readAndClearHandoff, readInventory } from "./inventory.js";
-import { isPlacing, placeBlocksAtOrigin, startPlacement } from "./placement.js";
+import { cancelPlacement, isPlacing, placeBlocksAtOrigin, startPlacement } from "./placement.js";
 import { LOOK_BY_ARROW } from "./look.js";
 import { installTwoBitAdder, syncTwoBitAdder } from "./two-bit-adder.js";
+import { editActionFromKey, ManualEditor } from "./edit-history.js";
 
 const SPACE_LOAD_START_PERCENT = 13;
 const SPACE_LOAD_MID_PERCENT = 66;
@@ -35,6 +36,7 @@ const handoff = readAndClearHandoff();
 const platformSize = resolvePlatformSize(handoff?.platformSize);
 const world = new World(document.getElementById("game"), platformSize);
 window.world = world;
+const manualEditor = new ManualEditor(world);
 let selected = 0;
 let pendingPlacement = null;
 if (handoff?.kind === "place" && Array.isArray(handoff.blocks) && handoff.blocks.length > 0) {
@@ -77,6 +79,32 @@ function tickLoad() {
 tickLoad();
 
 const bar = document.getElementById("hotbar");
+const editingStatus = document.getElementById("editing-status");
+let editingStatusTimer = null;
+
+function updateEditingStatus(message) {
+  clearTimeout(editingStatusTimer);
+  editingStatus.textContent = message
+    ?? `Build: ${manualEditor.isLocked() ? "Locked" : "Unlocked"} (L)`;
+}
+
+function flashEditingStatus(message) {
+  updateEditingStatus(message);
+  editingStatusTimer = setTimeout(() => updateEditingStatus(), 1800);
+}
+
+function handleHistoryResult(result) {
+  if (result.status === "applied") {
+    if (twoBitAdder) syncTwoBitAdder(world, twoBitAdder);
+    updateEditingStatus();
+  } else if (result.status === "conflict") {
+    flashEditingStatus("History reset: world changed outside manual build");
+  } else if (result.status === "locked") {
+    flashEditingStatus("Build locked — press L to unlock");
+  }
+}
+
+updateEditingStatus();
 HOTBAR_IDS.forEach((id, i) => {
   const s = document.createElement("div");
   s.className = "slot";
@@ -108,6 +136,19 @@ function selectSlot(i) {
 }
 selectSlot(0);
 
+addEventListener("keydown", (event) => {
+  const action = editActionFromKey(event);
+  if (!action) return;
+  event.preventDefault();
+  if (action === "toggle-lock") {
+    const locked = manualEditor.toggleLocked();
+    if (locked) cancelPlacement();
+    updateEditingStatus();
+    return;
+  }
+  handleHistoryResult(action === "undo" ? manualEditor.undo() : manualEditor.redo());
+});
+
 addEventListener("keydown", (e) => {
   const digitMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
   if (!digitMatch) return;
@@ -138,7 +179,14 @@ document.getElementById("game").addEventListener("click", () => world.lock());
 world.interaction.addEventListener("lock", () => {
   hidePauseMenu();
   if (pendingPlacement) {
-    startPlacement(world, pendingPlacement);
+    if (manualEditor.isLocked()) {
+      flashEditingStatus("Build locked — press L before placing Inventory blocks");
+    } else {
+      startPlacement(world, pendingPlacement, {
+        canCommit: () => !manualEditor.isLocked(),
+        onBlocked: () => flashEditingStatus("Build locked — press L to place"),
+      });
+    }
     pendingPlacement = null;
   }
 });
@@ -152,7 +200,9 @@ addEventListener("mousedown", (e) => {
   const pick = world.pickCenter();
   if (!pick) return;
   if (e.button === 2) {
-    if (pick.hit) world.remove(...pick.hit);
+    if (!pick.hit) return;
+    const result = manualEditor.edit(pick.hit, () => world.remove(...pick.hit));
+    if (result.status === "locked") flashEditingStatus("Build locked — press L to unlock");
   } else if (e.button === 0) {
     if (pick.hit) {
       const b = world.blocks.get(pick.hit.join(","));
@@ -164,13 +214,17 @@ addEventListener("mousedown", (e) => {
         }
         const def = BLOCKS[b.id];
         if (def.repeater || def.comparator) {
-          if (e.shiftKey && def.comparator) world.toggleMode(...pick.hit);
-          else world.rotateDevice(...pick.hit);
+          const result = manualEditor.edit(pick.hit, () => {
+            if (e.shiftKey && def.comparator) world.toggleMode(...pick.hit);
+            else world.rotateDevice(...pick.hit);
+          });
+          if (result.status === "locked") flashEditingStatus("Build locked — press L to unlock");
           return;
         }
       }
     }
-    world.place(...pick.placeAt, HOTBAR_IDS[selected]);
+    const result = manualEditor.edit(pick.placeAt, () => world.place(...pick.placeAt, HOTBAR_IDS[selected]));
+    if (result.status === "locked") flashEditingStatus("Build locked — press L to unlock");
   }
 });
 addEventListener("contextmenu", (e) => e.preventDefault());

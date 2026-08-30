@@ -92,6 +92,9 @@ html, body { margin: 0; height: 100%; overflow: hidden;
 
 #hud { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 10; }
+#editing-status { padding: 3px 7px; border: 1px solid rgb(255 255 255 / 70%);
+  background: rgb(0 0 0 / 65%); color: #fff; text-shadow: 1px 1px #000;
+  font: 700 12px/1.2 "Courier New", monospace; }
 #held { color: #fff; text-shadow: 2px 2px #000; font-size: 14px; height: 18px; }
 #hotbar { display: flex; gap: 2px; background: rgba(0,0,0,.5);
   border: 2px solid #1d1d1d; padding: 3px; border-radius: 2px; }

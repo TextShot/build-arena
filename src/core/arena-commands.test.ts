@@ -254,4 +254,35 @@ describe("arena commands", () => {
     expect(undo).toMatchObject({ success: true, revision: 3, affectedBlocks: 2 });
     expect(engine.snapshotBlocks()).toHaveLength(2);
   });
+
+  it("replaces the complete build above the set_blocks limit in one undoable entry", () => {
+    const engine = createArenaEngine();
+    engine.apply({
+      type: "set_blocks",
+      expectedRevision: 0,
+      edits: [{ action: "place", position: { x: 20, y: 1, z: 20 }, block: "glass" }],
+    });
+    const blocks = Array.from({ length: 289 }, (_, index) => ({
+      position: {
+        x: (index % 17) - 8,
+        y: 1,
+        z: Math.floor(index / 17) - 8,
+      },
+      block: "stone" as const,
+    }));
+
+    const replaced = engine.apply({
+      type: "replace_all_blocks",
+      expectedRevision: 1,
+      blocks,
+    });
+    expect(replaced).toMatchObject({ success: true, revision: 2, affectedBlocks: 290 });
+    expect(engine.snapshotBlocks()).toHaveLength(289);
+
+    const undo = engine.apply({ type: "undo", expectedRevision: 2 });
+    expect(undo).toMatchObject({ success: true, revision: 3, affectedBlocks: 290 });
+    expect(engine.snapshotBlocks()).toEqual([
+      expect.objectContaining({ position: { x: 20, y: 1, z: 20 }, block: "glass" }),
+    ]);
+  });
 });

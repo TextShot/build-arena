@@ -223,11 +223,20 @@ export class ArenaRenderer {
   };
 
   private cellAt(event: PointerEvent): CellHit | null {
-    const bounds = this.renderer.domElement.getBoundingClientRect();
-    if (bounds.width === 0 || bounds.height === 0) return null;
+    const canvas = this.renderer.domElement;
+    const bounds = canvas.getBoundingClientRect();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const left = bounds.left + canvas.clientLeft;
+    const top = bounds.top + canvas.clientTop;
+    if (
+      width === 0 || height === 0 ||
+      event.clientX < left || event.clientX > left + width ||
+      event.clientY < top || event.clientY > top + height
+    ) return null;
     this.pointer.set(
-      ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
-      -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      ((event.clientX - left) / width) * 2 - 1,
+      -((event.clientY - top) / height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
 

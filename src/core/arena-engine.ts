@@ -100,6 +100,13 @@ export type ClearBlocksCommand = Readonly<{
   expectedRevision: number;
 }>;
 
+/** Atomically replaces every mutable build cell without the set_blocks batch limit. */
+export type ReplaceAllBlocksCommand = Readonly<{
+  type: "replace_all_blocks";
+  expectedRevision: number;
+  blocks: readonly Block[];
+}>;
+
 /** Core cancellation is deferred; adapters may add it later. */
 export type ArenaCommand =
   | SetBlocksCommand
@@ -107,7 +114,8 @@ export type ArenaCommand =
   | RedoCommand
   | GenerateShapeCommand
   | TransformRegionCommand
-  | ClearBlocksCommand;
+  | ClearBlocksCommand
+  | ReplaceAllBlocksCommand;
 
 export type ArenaSuccess = Readonly<{
   success: true;

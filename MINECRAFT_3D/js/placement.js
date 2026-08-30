@@ -37,6 +37,21 @@ export function placeBlocksAtOrigin(world, blocks, origin) {
   return { applied };
 }
 
+export function commitPlacement(
+  world,
+  blocks,
+  { canCommit = () => true, onBlocked = () => {} } = {},
+) {
+  if (!canCommit()) {
+    onBlocked();
+    return { status: "blocked" };
+  }
+  const pick = world.pickCenter();
+  if (!pick) return { status: "no-target" };
+  const { applied } = placeBlocksAtOrigin(world, blocks, originFromPick(pick));
+  return { status: "applied", applied };
+}
+
 let activeSession = null;
 
 export function isPlacing() {
@@ -47,7 +62,7 @@ export function cancelPlacement() {
   activeSession?.cancel();
 }
 
-export function startPlacement(world, blocks) {
+export function startPlacement(world, blocks, options) {
   cancelPlacement();
   if (!blocks?.length) return null;
 
@@ -95,10 +110,8 @@ export function startPlacement(world, blocks) {
   }
 
   function commit() {
-    const pick = world.pickCenter();
-    if (!pick) return;
-    placeBlocksAtOrigin(world, blocks, originFromPick(pick));
-    finish();
+    const result = commitPlacement(world, blocks, options);
+    if (result.status === "applied") finish();
   }
 
   function onMouseDown(event) {

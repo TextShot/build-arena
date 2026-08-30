@@ -5,11 +5,12 @@ import type {
   BlockEdit,
   ClearBlocksCommand,
   GenerateShapeCommand,
+  ReplaceAllBlocksCommand,
   TransformRegionCommand,
 } from "./arena-engine";
 import type { ArenaConfig, Bounds } from "./arena-config";
 import { DEFAULT_MAX_BATCH_EDITS } from "./arena-config";
-import type { BlockId, BlockState, Facing, WorldCell } from "./block-types";
+import type { Block, BlockId, BlockState, Facing, WorldCell } from "./block-types";
 import {
   blockStateKind,
   cellEquals,
@@ -469,6 +470,67 @@ function executeClearBlocks(
   return commitOrDryRun(world, changes, revision, history, false);
 }
 
+function executeReplaceAllBlocks(
+  world: MutableArenaWorld,
+  command: ReplaceAllBlocksCommand,
+  revision: number,
+  config: ArenaConfig,
+  history: HistoryManager,
+): CommandExecution {
+  const revisionFailure = validateExpectedRevision(command.expectedRevision, revision);
+  if (revisionFailure) return failed(revision, revisionFailure.error, revisionFailure.fieldPath);
+  if (!Array.isArray(command.blocks)) return failed(revision, "blocks must be an array", "blocks");
+
+  const targets = new Map<CoordinateKey, { position: Coordinate; cell: WorldCell }>();
+  const pendingGroups = new Map<string, BlockId>();
+  for (let index = 0; index < command.blocks.length; index += 1) {
+    const block = command.blocks[index] as Block | undefined;
+    const fieldPath = `blocks[${index}]`;
+    if (!block || typeof block !== "object") return failed(revision, "Block must be an object", fieldPath);
+    const positionFailure = validateArenaPosition(block.position, config, `${fieldPath}.position`);
+    if (positionFailure) return failed(revision, positionFailure.error, positionFailure.fieldPath);
+    const blockFailure = validateBlockType(block.block, `${fieldPath}.block`);
+    if (blockFailure) return failed(revision, blockFailure.error, blockFailure.fieldPath);
+    const normalized = normalizeBlockState(block.block, block.state);
+    if (!normalized.ok) return failed(revision, normalized.error, `${fieldPath}.state`);
+    const objectIdFailure = validateObjectId(block.objectId, `${fieldPath}.objectId`);
+    if (objectIdFailure) return failed(revision, objectIdFailure.error, objectIdFailure.fieldPath);
+    if (block.objectId) {
+      const groupedType = pendingGroups.get(block.objectId);
+      if (groupedType !== undefined && groupedType !== block.block) {
+        return failed(
+          revision,
+          `objectId "${block.objectId}" groups multiple block types`,
+          `${fieldPath}.objectId`,
+        );
+      }
+      pendingGroups.set(block.objectId, block.block);
+    }
+    const key = coordinateKey(block.position);
+    if (targets.has(key)) return failed(revision, "Duplicate coordinates are not allowed", `${fieldPath}.position`);
+    targets.set(key, {
+      position: block.position,
+      cell: freezeCell(block.block, normalized.state, block.objectId),
+    });
+  }
+
+  const changes: BlockChange[] = [];
+  for (const { position, cell: before } of world.entries()) {
+    const key = coordinateKey(position);
+    const target = targets.get(key);
+    if (!target) {
+      changes.push(changeFor(position, before, null));
+      continue;
+    }
+    if (!cellEquals(before, target.cell)) changes.push(changeFor(position, before, target.cell));
+    targets.delete(key);
+  }
+  for (const target of targets.values()) {
+    changes.push(changeFor(target.position, null, target.cell));
+  }
+  return commitOrDryRun(world, changes, revision, history, false);
+}
+
 export function executeCommand(
   world: MutableArenaWorld,
   command: ArenaCommand,
@@ -484,5 +546,6 @@ export function executeCommand(
   if (command.type === "generate_shape") return executeGenerateShape(world, command, revision, config, history);
   if (command.type === "transform_region") return executeTransformRegion(world, command, revision, config, history);
   if (command.type === "clear_blocks") return executeClearBlocks(world, command, revision, config, history);
+  if (command.type === "replace_all_blocks") return executeReplaceAllBlocks(world, command, revision, config, history);
   return failed(revision, "Unknown arena command type", "type");
 }
