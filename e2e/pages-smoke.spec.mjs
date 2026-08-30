@@ -72,7 +72,8 @@ test("Play Space starts from the GitHub Pages base path", async ({ page }) => {
   expect(bounds?.width).toBeGreaterThan(0);
   expect(bounds?.height).toBeGreaterThan(0);
   await expect(page.locator("#hotbar .slot")).toHaveCount(12);
-  await expect(page.locator("#space-play")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-app-ready", "true");
+  await expect(page.locator("#space-load")).toBeVisible();
   await expect(page.locator("#startup-recovery")).toBeHidden();
   expect(errors).toEqual([]);
 });
