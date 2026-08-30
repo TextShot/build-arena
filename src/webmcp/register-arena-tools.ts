@@ -24,25 +24,32 @@ function describeTool(name: ArenaToolName): string {
  * Tools read fresh engine state on every call, so block/revision changes never
  * require re-registration.
  */
-export function registerArenaTools(engine: ArenaEngine, options: RegisterArenaToolsOptions): boolean {
+export async function registerArenaTools(
+  engine: ArenaEngine,
+  options: RegisterArenaToolsOptions,
+): Promise<boolean> {
   const modelContext = options.modelContext ??
     (typeof document !== "undefined" ? document.modelContext : undefined);
   if (!modelContext || typeof modelContext.registerTool !== "function" || options.signal.aborted) {
     return false;
   }
 
-  const handlers = createArenaToolHandlers(engine, options.hooks);
-  for (const name of ARENA_TOOL_NAMES) {
-    modelContext.registerTool(
-      {
-        name,
-        description: describeTool(name),
-        inputSchema: ARENA_TOOL_SCHEMAS[name] as unknown as Record<string, unknown>,
-        annotations: { readOnlyHint: READ_ONLY_TOOLS.includes(name) },
-        execute: (args: unknown) => handlers[name](args),
-      },
-      { signal: options.signal },
-    );
+  try {
+    const handlers = createArenaToolHandlers(engine, options.hooks);
+    for (const name of ARENA_TOOL_NAMES) {
+      await modelContext.registerTool(
+        {
+          name,
+          description: describeTool(name),
+          inputSchema: ARENA_TOOL_SCHEMAS[name] as unknown as Record<string, unknown>,
+          annotations: { readOnlyHint: READ_ONLY_TOOLS.includes(name) },
+          execute: (args: unknown) => handlers[name](args),
+        },
+        { signal: options.signal },
+      );
+    }
+    return true;
+  } catch {
+    return false;
   }
-  return true;
 }

@@ -16,10 +16,17 @@ export type ArenaToolHooks = Readonly<{
 
 export type ArenaToolHandler = (args: unknown) => ToolCallResult;
 
-const ajv = new Ajv({ allErrors: true, strict: true });
-const validators = new Map<ArenaToolName, ValidateFunction>();
-for (const [name, schema] of Object.entries(ARENA_TOOL_SCHEMAS)) {
-  validators.set(name as ArenaToolName, ajv.compile(schema));
+let cachedValidators: Map<ArenaToolName, ValidateFunction> | undefined;
+
+function getValidators(): Map<ArenaToolName, ValidateFunction> {
+  if (cachedValidators) return cachedValidators;
+  const ajv = new Ajv({ allErrors: true, strict: true });
+  const validators = new Map<ArenaToolName, ValidateFunction>();
+  for (const [name, schema] of Object.entries(ARENA_TOOL_SCHEMAS)) {
+    validators.set(name as ArenaToolName, ajv.compile(schema));
+  }
+  cachedValidators = validators;
+  return validators;
 }
 
 function schemaError(name: ArenaToolName, validate: ValidateFunction): ToolCallResult {
@@ -37,6 +44,7 @@ export function createArenaToolHandlers(
   engine: ArenaEngine,
   hooks: ArenaToolHooks = {},
 ): Record<ArenaToolName, ArenaToolHandler> {
+  const validators = getValidators();
   const run = (name: ArenaToolName, handler: (args: Record<string, unknown>) => ToolCallResult): ArenaToolHandler =>
     (args: unknown): ToolCallResult => {
       const validate = validators.get(name);

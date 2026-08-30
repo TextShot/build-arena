@@ -9,7 +9,7 @@ import type { ModelContext, ToolDescriptor } from "./webmcp-types";
 function fakeModelContext() {
   const tools = new Map<string, ToolDescriptor>();
   const modelContext: ModelContext = {
-    registerTool(tool, options) {
+    async registerTool(tool, options) {
       tools.set(tool.name, tool);
       options?.signal?.addEventListener("abort", () => tools.delete(tool.name), { once: true });
     },
@@ -18,11 +18,11 @@ function fakeModelContext() {
 }
 
 describe("registerArenaTools", () => {
-  it("is harmless when document.modelContext is missing", () => {
+  it("is harmless when document.modelContext is missing", async () => {
     const engine = createArenaEngine();
     const controller = new AbortController();
 
-    expect(registerArenaTools(engine, { signal: controller.signal })).toBe(false);
+    expect(await registerArenaTools(engine, { signal: controller.signal })).toBe(false);
     expect(() => controller.abort()).not.toThrow();
   });
 
@@ -31,7 +31,7 @@ describe("registerArenaTools", () => {
     const { modelContext, tools } = fakeModelContext();
     const controller = new AbortController();
 
-    expect(registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(true);
+    expect(await registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(true);
     expect([...tools.keys()].sort()).toEqual([...ARENA_TOOL_NAMES].sort());
     expect(tools.get("get_arena_context")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.get("set_blocks")?.annotations?.readOnlyHint).toBe(false);
@@ -44,32 +44,46 @@ describe("registerArenaTools", () => {
     expect(engine.getSummary().blockCount).toBe(1);
   });
 
-  it("does not expose any resize tool to agents", () => {
+  it("does not expose any resize tool to agents", async () => {
     const { modelContext, tools } = fakeModelContext();
     const controller = new AbortController();
-    registerArenaTools(createArenaEngine(), { signal: controller.signal, modelContext });
+    await registerArenaTools(createArenaEngine(), { signal: controller.signal, modelContext });
 
     expect([...tools.keys()].some((name) => name.includes("resize"))).toBe(false);
   });
 
-  it("removes registrations when the AbortController aborts", () => {
+  it("removes registrations when the AbortController aborts", async () => {
     const engine = createArenaEngine();
     const { modelContext, tools } = fakeModelContext();
     const controller = new AbortController();
-    registerArenaTools(engine, { signal: controller.signal, modelContext });
+    await registerArenaTools(engine, { signal: controller.signal, modelContext });
     expect(tools.size).toBe(ARENA_TOOL_NAMES.length);
 
     controller.abort();
     expect(tools.size).toBe(0);
   });
 
-  it("refuses to register on an already-aborted signal", () => {
+  it("refuses to register on an already-aborted signal", async () => {
     const engine = createArenaEngine();
     const { modelContext, tools } = fakeModelContext();
     const controller = new AbortController();
     controller.abort();
 
-    expect(registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(false);
+    expect(await registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(false);
     expect(tools.size).toBe(0);
+  });
+
+  it("returns false when registerTool rejects", async () => {
+    const modelContext: ModelContext = {
+      registerTool() {
+        return Promise.reject(new Error("NotAllowedError"));
+      },
+    };
+    const controller = new AbortController();
+
+    expect(await registerArenaTools(createArenaEngine(), {
+      signal: controller.signal,
+      modelContext,
+    })).toBe(false);
   });
 });

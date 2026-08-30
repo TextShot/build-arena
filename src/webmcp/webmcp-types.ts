@@ -27,7 +27,7 @@ export type ToolDescriptor = Readonly<{
 }>;
 
 export type ModelContext = Readonly<{
-  registerTool(tool: ToolDescriptor, options?: { signal?: AbortSignal }): void;
+  registerTool(tool: ToolDescriptor, options?: { signal?: AbortSignal }): Promise<void>;
 }>;
 
 declare global {

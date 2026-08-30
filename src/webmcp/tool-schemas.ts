@@ -72,20 +72,18 @@ const dryRun = {
   description: "When true, validate and report affected blocks/bounds without mutating the arena.",
 } as const;
 
-function requiredFields(fields: readonly string[]) {
-  return fields.map((field) => ({ required: [field] }));
-}
+const pattern = {
+  type: "string",
+  minLength: 1,
+  maxLength: 120,
+  description: "Compact run-string block_objectId@x,y,z+(axisCount); count includes the origin block.",
+} as const;
 
-function operationRule(
-  operation: "copy" | "move" | "rotate" | "mirror" | "replace_type",
-  required: readonly string[],
-  forbidden: readonly string[],
-) {
-  return {
-    if: { properties: { operation: { const: operation } } },
-    then: { required: [...required], not: { anyOf: requiredFields(forbidden) } },
-  };
-}
+const shapeKind = {
+  type: "string",
+  enum: ["floor", "wall", "filled_box", "hollow_box"],
+  description: "Shape kind for a structured call.",
+} as const;
 
 export const ARENA_TOOL_SCHEMAS = Object.freeze({
   get_arena_context: {
@@ -171,57 +169,109 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   generate_shape: {
     type: "object",
     description: "Fill a floor, wall, filled box, or hollow box atomically. Accepts either structured fields or a compact pattern run-string like oak_planks_1@0,1,0-(x5).",
-    additionalProperties: false,
-    required: ["expectedRevision"],
     oneOf: [
       {
-        required: ["pattern"],
-        not: { anyOf: requiredFields(["shape", "region", "block", "state", "objectId"]) },
+        title: "pattern",
+        description: "Generate one straight run from the compact pattern DSL.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "pattern"],
+        properties: { expectedRevision, pattern, dryRun },
       },
       {
-        required: ["shape", "region", "block"],
-        not: { required: ["pattern"] },
+        title: "structured",
+        description: "Generate a floor, wall, filled box, or hollow box from explicit fields.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "shape", "region", "block"],
+        properties: {
+          expectedRevision,
+          shape: shapeKind,
+          region: bounds,
+          block: blockId,
+          state: blockState,
+          objectId,
+          dryRun,
+        },
       },
     ],
-    properties: {
-      expectedRevision,
-      pattern: {
-        type: "string",
-        minLength: 1,
-        maxLength: 120,
-        description: "Compact run-string block_objectId@x,y,z+(axisCount); count includes the origin block. Mutually exclusive with shape/region/block.",
-      },
-      shape: { type: "string", enum: ["floor", "wall", "filled_box", "hollow_box"], description: "Shape kind for structured calls." },
-      region: bounds,
-      block: blockId,
-      state: blockState,
-      objectId,
-      dryRun,
-    },
   },
   transform_region: {
     type: "object",
     description: "Copy, move, rotate, mirror, or replace block types inside a region atomically. Grouping and state are preserved and reoriented.",
-    additionalProperties: false,
-    required: ["expectedRevision", "operation", "region"],
-    allOf: [
-      operationRule("copy", ["offset"], ["rotation", "axis", "from", "to"]),
-      operationRule("move", ["offset"], ["rotation", "axis", "from", "to"]),
-      operationRule("rotate", ["rotation"], ["offset", "axis", "from", "to"]),
-      operationRule("mirror", ["axis"], ["offset", "rotation", "from", "to"]),
-      operationRule("replace_type", ["from", "to"], ["offset", "rotation", "axis"]),
+    oneOf: [
+      {
+        title: "copy",
+        description: "Copy every block in the region by an offset.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "operation", "region", "offset"],
+        properties: {
+          expectedRevision,
+          operation: { type: "string", enum: ["copy"], description: "Copy the region." },
+          region: bounds,
+          offset: offsetCoordinate,
+          dryRun,
+        },
+      },
+      {
+        title: "move",
+        description: "Move every block in the region by an offset.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "operation", "region", "offset"],
+        properties: {
+          expectedRevision,
+          operation: { type: "string", enum: ["move"], description: "Move the region." },
+          region: bounds,
+          offset: offsetCoordinate,
+          dryRun,
+        },
+      },
+      {
+        title: "rotate",
+        description: "Rotate the region clockwise around Y.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "operation", "region", "rotation"],
+        properties: {
+          expectedRevision,
+          operation: { type: "string", enum: ["rotate"], description: "Rotate the region." },
+          region: bounds,
+          rotation: { type: "integer", enum: [90, 180, 270], description: "Clockwise degrees around Y." },
+          dryRun,
+        },
+      },
+      {
+        title: "mirror",
+        description: "Mirror the region across X or Z.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "operation", "region", "axis"],
+        properties: {
+          expectedRevision,
+          operation: { type: "string", enum: ["mirror"], description: "Mirror the region." },
+          region: bounds,
+          axis: { type: "string", enum: ["x", "z"], description: "Axis to mirror across." },
+          dryRun,
+        },
+      },
+      {
+        title: "replace_type",
+        description: "Replace one block type with another inside the region.",
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedRevision", "operation", "region", "from", "to"],
+        properties: {
+          expectedRevision,
+          operation: { type: "string", enum: ["replace_type"], description: "Replace matching block types." },
+          region: bounds,
+          from: blockId,
+          to: blockId,
+          dryRun,
+        },
+      },
     ],
-    properties: {
-      expectedRevision,
-      operation: { type: "string", enum: ["copy", "move", "rotate", "mirror", "replace_type"], description: "The transform to apply." },
-      region: bounds,
-      offset: offsetCoordinate,
-      rotation: { type: "integer", enum: [90, 180, 270], description: "Clockwise rotation around Y, anchored at the region minimum corner." },
-      axis: { type: "string", enum: ["x", "z"], description: "Mirror axis: x flips east/west, z flips north/south." },
-      from: blockId,
-      to: blockId,
-      dryRun,
-    },
   },
   render_build_views: {
     type: "object",

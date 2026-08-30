@@ -153,7 +153,7 @@ export function BuildArenaPage() {
   // page-scoped registration. Unsupported browsers keep the full human editor.
   useEffect(() => {
     const controller = new AbortController();
-    registerArenaTools(engine, {
+    void registerArenaTools(engine, {
       signal: controller.signal,
       hooks: {
         onToolCall: (name, success, revision, payload) =>

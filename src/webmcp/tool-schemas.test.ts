@@ -48,8 +48,12 @@ describe("arena tool schemas", () => {
     const writes = ARENA_TOOL_NAMES.filter((name) => !READ_ONLY_TOOLS.includes(name) && name !== "save_blueprint");
     expect(writes).toEqual(["set_blocks", "undo_build_change", "generate_shape", "transform_region"]);
     for (const name of writes) {
-      const schema = ARENA_TOOL_SCHEMAS[name] as { required?: readonly string[] };
-      expect(schema.required, name).toContain("expectedRevision");
+      const schema = ARENA_TOOL_SCHEMAS[name] as {
+        required?: readonly string[];
+        oneOf?: readonly { required?: readonly string[] }[];
+      };
+      const variants = schema.oneOf ?? [schema];
+      expect(variants.every((variant) => variant.required?.includes("expectedRevision")), name).toBe(true);
     }
   });
 
