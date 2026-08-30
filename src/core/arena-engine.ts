@@ -5,15 +5,22 @@ import {
   DEFAULT_QUERY_LIMIT,
   MAX_QUERY_LIMIT,
 } from "./arena-config";
-import type { Block, BlockCounts, BlockId } from "./block-types";
-import { PHASE_A_BLOCK_IDS } from "./block-types";
+import type { Block, BlockCounts, BlockId, BlockState } from "./block-types";
+import { ALL_BLOCK_IDS } from "./block-types";
 import type { Coordinate } from "./coordinates";
 
 export { DEFAULT_ARENA_CONFIG } from "./arena-config";
-export { PHASE_A_BLOCK_IDS } from "./block-types";
+export { ALL_BLOCK_IDS, PHASE_A_BLOCK_IDS } from "./block-types";
 export type { ArenaConfig, Bounds } from "./arena-config";
-export type { Block, BlockCounts, BlockId } from "./block-types";
+export type { Block, BlockCounts, BlockId, BlockState } from "./block-types";
 export type { Coordinate, CoordinateKey } from "./coordinates";
+
+/** The value stored at one occupied world cell. Optional keys are omitted when absent. */
+export type WorldCell = Readonly<{
+  block: BlockId;
+  state?: BlockState;
+  objectId?: string;
+}>;
 
 export type BlockEdit =
   /** Place is valid only when the target is empty. */
@@ -21,12 +28,16 @@ export type BlockEdit =
       action: "place";
       position: Coordinate;
       block: BlockId;
+      state?: BlockState;
+      objectId?: string;
     }>
-  /** Replace is valid only when occupied; the same ID is a no-op. */
+  /** Replace is valid only when occupied; an identical cell is a no-op. */
   | Readonly<{
       action: "replace";
       position: Coordinate;
       block: BlockId;
+      state?: BlockState;
+      objectId?: string;
     }>
   /** Removing an empty target is a valid no-op. */
   | Readonly<{
@@ -53,8 +64,50 @@ export type RedoCommand = Readonly<{
   expectedRevision: number;
 }>;
 
-/** Dry-run execution and core cancellation are deferred; adapters may add them later. */
-export type ArenaCommand = SetBlocksCommand | UndoCommand | RedoCommand;
+export type ShapeKind = "floor" | "wall" | "filled_box" | "hollow_box";
+
+/**
+ * Fills a shape inside `region` with one block (place-or-replace per cell).
+ * Cells already holding an identical cell value are skipped. Atomic and revisioned.
+ */
+export type GenerateShapeCommand = Readonly<{
+  type: "generate_shape";
+  expectedRevision: number;
+  shape: ShapeKind;
+  region: Bounds;
+  block: BlockId;
+  state?: BlockState;
+  objectId?: string;
+  /** Validate and report affected cells without mutating the world. */
+  dryRun?: boolean;
+}>;
+
+export type TransformOperation = "copy" | "move" | "rotate" | "mirror" | "replace_type";
+
+export type TransformRegionCommand = Readonly<{
+  type: "transform_region";
+  expectedRevision: number;
+  operation: TransformOperation;
+  region: Bounds;
+  /** copy/move target offset. */
+  offset?: Coordinate;
+  /** rotate: clockwise degrees around Y within the region, anchored at region min. */
+  rotation?: 90 | 180 | 270;
+  /** mirror axis: x flips east/west, z flips north/south. */
+  axis?: "x" | "z";
+  /** replace_type source and target block ids. */
+  from?: BlockId;
+  to?: BlockId;
+  dryRun?: boolean;
+}>;
+
+/** Core cancellation is deferred; adapters may add it later. */
+export type ArenaCommand =
+  | SetBlocksCommand
+  | UndoCommand
+  | RedoCommand
+  | GenerateShapeCommand
+  | TransformRegionCommand;
 
 export type ArenaSuccess = Readonly<{
   success: true;
@@ -65,6 +118,8 @@ export type ArenaSuccess = Readonly<{
   warnings: readonly string[];
   /** Null for a valid no-op, which has no history entry to undo. */
   undoId: string | null;
+  /** Present when the command created or extended a persistent object group. */
+  objectId?: string;
 }>;
 
 export type ArenaFailure = Readonly<{
@@ -142,6 +197,11 @@ export type BlockChange = Readonly<{
   position: Coordinate;
   before: BlockId | null;
   after: BlockId | null;
+  /** State/objectId snapshots; keys are omitted when the cell had none. */
+  beforeState?: BlockState;
+  afterState?: BlockState;
+  beforeObjectId?: string;
+  afterObjectId?: string;
 }>;
 
 export type ArenaChange = Readonly<{
@@ -171,7 +231,7 @@ export interface ArenaEngine {
 /** Shared immutable values used by engine implementations and adapters. */
 export const ARENA_CONTRACT_DEFAULTS = Object.freeze({
   bounds: DEFAULT_ARENA_CONFIG,
-  blockTypes: PHASE_A_BLOCK_IDS,
+  blockTypes: ALL_BLOCK_IDS,
   limits: Object.freeze({
     maxBatchEdits: DEFAULT_MAX_BATCH_EDITS,
     defaultQueryLimit: DEFAULT_QUERY_LIMIT,

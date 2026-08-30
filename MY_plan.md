@@ -1,8 +1,28 @@
 # My plan (product notes)
 
-There will be two tabs : the game and the build arena . 
-The build arena will be simpler for agent to understand , communicate and build stuff using the Blocks.
-Then we can select the build in from you inventory to place it in game .
+```mermaid
+sequenceDiagram
+  participant User
+  participant Arena as Build Arena Tab
+  participant Browser
+  participant Agent as Codex / Agent
+
+  User->>Arena: Open the site
+  Arena->>Browser: registerTool (name, description, schema)
+  Browser->>Agent: Display available tools
+  Agent->>Browser: Request set_blocks with JSON payload
+  Browser->>User: Prompt to review action
+  User->>Browser: Approve
+  Browser->>Arena: execute(input)
+  Arena->>Arena: Run command engine and update Three.js
+  Arena->>Agent: Return result (revision, bounds, errors)
+```
+
+The product features two tabs: **Game** and **Build Arena**.
+
+The **Build Arena** provides a focused, simplified space for both humans and agents to construct and manipulate block structures. This separation streamlines agent interaction—making it easier to issue commands, communicate changes, and build efficiently.
+
+Once a blueprint or structure is ready in the Build Arena, it can be selected from your inventory and placed into the Game tab.
 
 Mission : add web mcp to the game - so that agents can use tools to help us build from harness like codex. 
 User will prompt in harness and model harness will do the building . 

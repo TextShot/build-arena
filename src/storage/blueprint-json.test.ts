@@ -63,6 +63,72 @@ describe("blueprint JSON", () => {
     });
   });
 
+  it("imports a version-1 full-cube blueprint through the documented migration", () => {
+    const v1 = {
+      schemaVersion: 1,
+      id: "legacy-house",
+      name: "Legacy House",
+      size: { x: 1, y: 1, z: 1 },
+      anchor: { x: 0, y: 0, z: 0 },
+      blocks: [{ position: { x: 0, y: 1, z: 0 }, block: "stone" }],
+      blockSummary: { dirt: 0, stone: 1, oak_log: 0, oak_planks: 0, leaves: 0, glass: 0, obsidian: 0 },
+      validation: { errors: 0, warnings: ["legacy warning"] },
+      preview: { view: "isometric" },
+    };
+
+    const result = parseBlueprintJson(JSON.stringify(v1));
+    expect(result).toMatchObject({
+      success: true,
+      blueprint: {
+        schemaVersion: 2,
+        id: "legacy-house",
+        blocks: [{ position: { x: 0, y: 1, z: 0 }, block: "stone" }],
+        blockSummary: { stone: 1, oak_slab: 0, water: 0 },
+        validation: { errors: 0, warnings: ["legacy warning"] },
+      },
+    });
+  });
+
+  it("round-trips version-2 state and object groups without loss", () => {
+    const blueprint = createBlueprint(
+      [
+        {
+          position: { x: 0, y: 1, z: 0 },
+          block: "oak_stairs",
+          state: { facing: "east", half: "bottom", shape: "straight" },
+          objectId: "stairs_1",
+        },
+        { position: { x: 1, y: 1, z: 0 }, block: "oak_fence", objectId: "fence_1" },
+      ],
+      { id: "porch", name: "Porch" },
+    );
+
+    expect(parseBlueprintJson(serializeBlueprintJson(blueprint))).toEqual({
+      success: true,
+      blueprint,
+    });
+  });
+
+  it("rejects version-2 blocks with invalid state and unknown schema versions", () => {
+    const blueprint = createBlueprint(
+      [{ position: { x: 0, y: 1, z: 0 }, block: "stone" }],
+      { id: "base", name: "Base" },
+    );
+    const badState = {
+      ...blueprint,
+      blocks: [{ position: { x: 0, y: 1, z: 0 }, block: "stone", state: { half: "top" } }],
+    };
+    expect(parseBlueprintJson(JSON.stringify(badState))).toMatchObject({
+      success: false,
+      fieldPath: "blocks[0].state",
+    });
+
+    expect(parseBlueprintJson(JSON.stringify({ ...blueprint, schemaVersion: 3 }))).toMatchObject({
+      success: false,
+      fieldPath: "schemaVersion",
+    });
+  });
+
   it("accepts blocks on the configured height limit", () => {
     const blueprint = createBlueprint(
       [{ position: { x: 0, y: 31, z: 0 }, block: "stone" }],

@@ -1,15 +1,38 @@
-import type { ArenaCommand, ArenaResult, BlockChange, BlockEdit } from "./arena-engine";
+import type {
+  ArenaCommand,
+  ArenaResult,
+  BlockChange,
+  BlockEdit,
+  GenerateShapeCommand,
+  TransformRegionCommand,
+  WorldCell,
+} from "./arena-engine";
 import type { ArenaConfig, Bounds } from "./arena-config";
 import { DEFAULT_MAX_BATCH_EDITS } from "./arena-config";
-import type { BlockId } from "./block-types";
-import { coordinateKey, type Coordinate } from "./coordinates";
+import type { BlockId, BlockState, Facing } from "./block-types";
+import {
+  blockStateEquals,
+  blockStateKind,
+  mirrorFacing,
+  normalizeBlockState,
+  rotateFacing,
+} from "./block-types";
+import { coordinateKey, type Coordinate, type CoordinateKey } from "./coordinates";
 import { HistoryManager } from "./history";
-import { validateArenaPosition, validateBlockType, validateExpectedRevision } from "./validation";
+import {
+  validateArenaPosition,
+  validateBlockType,
+  validateBounds,
+  validateCoordinate,
+  validateExpectedRevision,
+  validateObjectId,
+} from "./validation";
 
 export type MutableArenaWorld = Readonly<{
-  get(position: Coordinate): BlockId | null;
-  set(position: Coordinate, block: BlockId): void;
+  get(position: Coordinate): WorldCell | null;
+  set(position: Coordinate, cell: WorldCell): void;
   remove(position: Coordinate): void;
+  entries(): Iterable<{ position: Coordinate; cell: WorldCell }>;
 }>;
 
 export type CommandExecution = Readonly<{
@@ -39,7 +62,43 @@ export function boundsForChanges(changes: readonly BlockChange[]): Bounds | null
   return Object.freeze({ min: Object.freeze(min), max: Object.freeze(max) });
 }
 
-function success(revision: number, changes: readonly BlockChange[], undoId: string | null): CommandExecution {
+function cellEquals(a: WorldCell | null, b: WorldCell | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.block === b.block && blockStateEquals(a.state, b.state) && a.objectId === b.objectId;
+}
+
+/** Builds a frozen change, omitting undefined state/objectId keys for stable equality. */
+function changeFor(position: Coordinate, before: WorldCell | null, after: WorldCell | null): BlockChange {
+  const change: Record<string, unknown> = {
+    position: Object.freeze({ ...position }),
+    before: before?.block ?? null,
+    after: after?.block ?? null,
+  };
+  if (before?.state) change.beforeState = before.state;
+  if (after?.state) change.afterState = after.state;
+  if (before?.objectId) change.beforeObjectId = before.objectId;
+  if (after?.objectId) change.afterObjectId = after.objectId;
+  return Object.freeze(change) as BlockChange;
+}
+
+function cellFromChange(change: BlockChange, inverse: boolean): WorldCell | null {
+  const block = inverse ? change.before : change.after;
+  if (block === null) return null;
+  const state = inverse ? change.beforeState : change.afterState;
+  const objectId = inverse ? change.beforeObjectId : change.afterObjectId;
+  const cell: Record<string, unknown> = { block };
+  if (state) cell.state = state;
+  if (objectId) cell.objectId = objectId;
+  return Object.freeze(cell) as WorldCell;
+}
+
+function success(
+  revision: number,
+  changes: readonly BlockChange[],
+  undoId: string | null,
+  extras: Readonly<{ warnings?: readonly string[]; objectId?: string }> = {},
+): CommandExecution {
   const affectedBounds = boundsForChanges(changes);
   return {
     result: {
@@ -47,8 +106,9 @@ function success(revision: number, changes: readonly BlockChange[], undoId: stri
       revision,
       affectedBlocks: changes.length,
       affectedBounds,
-      warnings: Object.freeze([]),
+      warnings: Object.freeze([...(extras.warnings ?? [])]),
       undoId,
+      ...(extras.objectId ? { objectId: extras.objectId } : {}),
     },
     changes: Object.freeze(changes),
     affectedBounds,
@@ -62,18 +122,50 @@ function failed(revision: number, message: string, fieldPath: string): CommandEx
 
 function applyChanges(world: MutableArenaWorld, changes: readonly BlockChange[], inverse = false): void {
   for (const change of changes) {
-    const block = inverse ? change.before : change.after;
-    if (block === null) world.remove(change.position);
-    else world.set(change.position, block);
+    const cell = cellFromChange(change, inverse);
+    if (cell === null) world.remove(change.position);
+    else world.set(change.position, cell);
   }
 }
 
 function inverseChanges(changes: readonly BlockChange[]): readonly BlockChange[] {
-  return Object.freeze(changes.map((change) => Object.freeze({
-    position: Object.freeze({ ...change.position }),
-    before: change.after,
-    after: change.before,
-  })));
+  return Object.freeze(changes.map((change) =>
+    changeFor(change.position, cellFromChange(change, false), cellFromChange(change, true)),
+  ));
+}
+
+/** Finds the block type of an existing persistent object group, if any block carries it. */
+function groupBlockType(world: MutableArenaWorld, objectId: string): BlockId | null {
+  for (const { cell } of world.entries()) {
+    if (cell.objectId === objectId) return cell.block;
+  }
+  return null;
+}
+
+/**
+ * Reusing an existing group appends only when its block type is compatible.
+ * `pendingGroups` covers groups introduced earlier in the same batch.
+ * Returns an error message, or null when compatible.
+ */
+function checkGroupCompatibility(
+  world: MutableArenaWorld,
+  objectId: string,
+  block: BlockId,
+  pendingGroups: Map<string, BlockId>,
+): string | null {
+  const existing = pendingGroups.get(objectId) ?? groupBlockType(world, objectId);
+  if (existing !== null && existing !== block) {
+    return `objectId "${objectId}" already groups ${existing} blocks`;
+  }
+  pendingGroups.set(objectId, block);
+  return null;
+}
+
+function buildCell(block: BlockId, state: BlockState | undefined, objectId: string | undefined): WorldCell {
+  const cell: Record<string, unknown> = { block };
+  if (state) cell.state = state;
+  if (objectId) cell.objectId = objectId;
+  return Object.freeze(cell) as WorldCell;
 }
 
 function executeSetBlocks(
@@ -91,6 +183,7 @@ function executeSetBlocks(
   }
 
   const seen = new Set<string>();
+  const pendingGroups = new Map<string, BlockId>();
   const changes: BlockChange[] = [];
   for (let index = 0; index < command.edits.length; index += 1) {
     const edit = command.edits[index] as BlockEdit | undefined;
@@ -108,17 +201,26 @@ function executeSetBlocks(
     const key = coordinateKey(position);
     if (seen.has(key)) return failed(revision, "Duplicate coordinates are not allowed", `${fieldPath}.position`);
     seen.add(key);
+
+    const before = world.get(position);
+    let after: WorldCell | null = null;
     if (edit.action !== "remove") {
       const blockFailure = validateBlockType(edit.block, `${fieldPath}.block`);
       if (blockFailure) return failed(revision, blockFailure.error, blockFailure.fieldPath);
+      const normalized = normalizeBlockState(edit.block, edit.state);
+      if (!normalized.ok) return failed(revision, normalized.error, `${fieldPath}.state`);
+      const objectIdFailure = validateObjectId(edit.objectId, `${fieldPath}.objectId`);
+      if (objectIdFailure) return failed(revision, objectIdFailure.error, objectIdFailure.fieldPath);
+      if (edit.objectId) {
+        const incompatible = checkGroupCompatibility(world, edit.objectId, edit.block, pendingGroups);
+        if (incompatible) return failed(revision, incompatible, `${fieldPath}.objectId`);
+      }
+      after = buildCell(edit.block, normalized.ok ? normalized.state : undefined, edit.objectId);
     }
-
-    const before = world.get(position);
-    const after = edit.action === "remove" ? null : edit.block;
     if (edit.action === "place" && before !== null) return failed(revision, "place requires an empty position", fieldPath);
     if (edit.action === "replace" && before === null) return failed(revision, "replace requires an occupied position", fieldPath);
-    if (before === after) continue;
-    changes.push(Object.freeze({ position: Object.freeze({ ...position }), before, after }));
+    if (cellEquals(before, after)) continue;
+    changes.push(changeFor(position, before, after));
   }
 
   changes.sort(compareChanges);
@@ -152,6 +254,234 @@ function executeHistory(
   return success(revision + 1, entry.changes, entry.id);
 }
 
+function regionCells(region: Bounds, shape: GenerateShapeCommand["shape"]): Coordinate[] {
+  const cells: Coordinate[] = [];
+  for (let x = region.min.x; x <= region.max.x; x += 1) {
+    for (let y = region.min.y; y <= region.max.y; y += 1) {
+      for (let z = region.min.z; z <= region.max.z; z += 1) {
+        if (shape === "hollow_box") {
+          const onShell = x === region.min.x || x === region.max.x ||
+            y === region.min.y || y === region.max.y ||
+            z === region.min.z || z === region.max.z;
+          if (!onShell) continue;
+        }
+        cells.push({ x, y, z });
+      }
+    }
+  }
+  return cells;
+}
+
+function commitOrDryRun(
+  world: MutableArenaWorld,
+  changes: BlockChange[],
+  revision: number,
+  history: HistoryManager,
+  dryRun: boolean | undefined,
+  objectId?: string,
+): CommandExecution {
+  changes.sort(compareChanges);
+  if (dryRun) {
+    // Report what would change, but hand the engine an empty change list so
+    // the dry run is never committed, recorded, or broadcast.
+    return {
+      result: {
+        success: true,
+        revision,
+        affectedBlocks: changes.length,
+        affectedBounds: boundsForChanges(changes),
+        warnings: Object.freeze(["Dry run: no blocks were changed"]),
+        undoId: null,
+        ...(objectId ? { objectId } : {}),
+      },
+      changes: Object.freeze([]),
+      affectedBounds: null,
+      undoId: null,
+    };
+  }
+  if (changes.length === 0) return success(revision, changes, null, { objectId });
+  applyChanges(world, changes);
+  const entry = history.record(changes);
+  return success(revision + 1, changes, entry.id, { objectId });
+}
+
+function executeGenerateShape(
+  world: MutableArenaWorld,
+  command: GenerateShapeCommand,
+  revision: number,
+  config: ArenaConfig,
+  history: HistoryManager,
+): CommandExecution {
+  const revisionFailure = validateExpectedRevision(command.expectedRevision, revision);
+  if (revisionFailure) return failed(revision, revisionFailure.error, revisionFailure.fieldPath);
+  if (command.shape !== "floor" && command.shape !== "wall" && command.shape !== "filled_box" && command.shape !== "hollow_box") {
+    return failed(revision, "shape must be floor, wall, filled_box, or hollow_box", "shape");
+  }
+  const boundsFailure = validateBounds(command.region, config, "region");
+  if (boundsFailure) return failed(revision, boundsFailure.error, boundsFailure.fieldPath);
+  const region = command.region;
+  if (region.min.y <= config.platformY) {
+    return failed(revision, "region must stay above the protected platform", "region.min.y");
+  }
+  if (command.shape === "floor" && region.min.y !== region.max.y) {
+    return failed(revision, "floor region must span a single Y layer", "region");
+  }
+  if (command.shape === "wall" && region.min.x !== region.max.x && region.min.z !== region.max.z) {
+    return failed(revision, "wall region must be one block thick in X or Z", "region");
+  }
+  const blockFailure = validateBlockType(command.block, "block");
+  if (blockFailure) return failed(revision, blockFailure.error, blockFailure.fieldPath);
+  const normalized = normalizeBlockState(command.block, command.state);
+  if (!normalized.ok) return failed(revision, normalized.error, "state");
+  const objectIdFailure = validateObjectId(command.objectId, "objectId");
+  if (objectIdFailure) return failed(revision, objectIdFailure.error, objectIdFailure.fieldPath);
+  if (command.objectId) {
+    const existing = groupBlockType(world, command.objectId);
+    if (existing !== null && existing !== command.block) {
+      return failed(revision, `objectId "${command.objectId}" already groups ${existing} blocks`, "objectId");
+    }
+  }
+
+  const after = buildCell(command.block, normalized.ok ? normalized.state : undefined, command.objectId);
+  const changes: BlockChange[] = [];
+  for (const position of regionCells(region, command.shape)) {
+    const before = world.get(position);
+    if (cellEquals(before, after)) continue;
+    changes.push(changeFor(position, before, after));
+  }
+  return commitOrDryRun(world, changes, revision, history, command.dryRun, command.objectId);
+}
+
+function transformFacing(
+  state: BlockState | undefined,
+  transform: (facing: Facing) => Facing,
+): BlockState | undefined {
+  if (!state?.facing) return state;
+  return Object.freeze({ ...state, facing: transform(state.facing) });
+}
+
+function executeTransformRegion(
+  world: MutableArenaWorld,
+  command: TransformRegionCommand,
+  revision: number,
+  config: ArenaConfig,
+  history: HistoryManager,
+): CommandExecution {
+  const revisionFailure = validateExpectedRevision(command.expectedRevision, revision);
+  if (revisionFailure) return failed(revision, revisionFailure.error, revisionFailure.fieldPath);
+  const boundsFailure = validateBounds(command.region, config, "region");
+  if (boundsFailure) return failed(revision, boundsFailure.error, boundsFailure.fieldPath);
+  const region = command.region;
+  if (region.min.y <= config.platformY) {
+    return failed(revision, "region must stay above the protected platform", "region.min.y");
+  }
+
+  const sources: { position: Coordinate; cell: WorldCell }[] = [];
+  for (const entry of world.entries()) {
+    const { position } = entry;
+    if (
+      position.x >= region.min.x && position.x <= region.max.x &&
+      position.y >= region.min.y && position.y <= region.max.y &&
+      position.z >= region.min.z && position.z <= region.max.z
+    ) {
+      sources.push(entry);
+    }
+  }
+
+  const targets = new Map<CoordinateKey, { position: Coordinate; cell: WorldCell }>();
+  const removals = new Map<CoordinateKey, Coordinate>();
+  const operation = command.operation;
+
+  if (operation === "copy" || operation === "move") {
+    const offsetFailure = validateCoordinate(command.offset, "offset");
+    if (offsetFailure) return failed(revision, offsetFailure.error, offsetFailure.fieldPath);
+    const offset = command.offset as Coordinate;
+    for (const { position, cell } of sources) {
+      const target = { x: position.x + offset.x, y: position.y + offset.y, z: position.z + offset.z };
+      const targetFailure = validateArenaPosition(target, config, "offset");
+      if (targetFailure) return failed(revision, "Transformed blocks would leave the arena", "offset");
+      targets.set(coordinateKey(target), { position: target, cell });
+      if (operation === "move") removals.set(coordinateKey(position), position);
+    }
+  } else if (operation === "rotate") {
+    if (command.rotation !== 90 && command.rotation !== 180 && command.rotation !== 270) {
+      return failed(revision, "rotation must be 90, 180, or 270", "rotation");
+    }
+    const quarterTurns = command.rotation / 90;
+    const sizeX = region.max.x - region.min.x + 1;
+    const sizeZ = region.max.z - region.min.z + 1;
+    for (const { position, cell } of sources) {
+      const lx = position.x - region.min.x;
+      const lz = position.z - region.min.z;
+      let nx: number;
+      let nz: number;
+      if (quarterTurns === 1) { nx = sizeZ - 1 - lz; nz = lx; }
+      else if (quarterTurns === 2) { nx = sizeX - 1 - lx; nz = sizeZ - 1 - lz; }
+      else { nx = lz; nz = sizeX - 1 - lx; }
+      const target = { x: region.min.x + nx, y: position.y, z: region.min.z + nz };
+      const targetFailure = validateArenaPosition(target, config, "rotation");
+      if (targetFailure) return failed(revision, "Rotated blocks would leave the arena", "rotation");
+      const rotatedCell = buildCell(
+        cell.block,
+        transformFacing(cell.state, (facing) => rotateFacing(facing, quarterTurns)),
+        cell.objectId,
+      );
+      targets.set(coordinateKey(target), { position: target, cell: rotatedCell });
+      removals.set(coordinateKey(position), position);
+    }
+  } else if (operation === "mirror") {
+    if (command.axis !== "x" && command.axis !== "z") {
+      return failed(revision, "axis must be x or z", "axis");
+    }
+    const axis = command.axis;
+    for (const { position, cell } of sources) {
+      const target = axis === "x"
+        ? { x: region.min.x + (region.max.x - position.x), y: position.y, z: position.z }
+        : { x: position.x, y: position.y, z: region.min.z + (region.max.z - position.z) };
+      const mirroredCell = buildCell(
+        cell.block,
+        transformFacing(cell.state, (facing) => mirrorFacing(facing, axis)),
+        cell.objectId,
+      );
+      targets.set(coordinateKey(target), { position: target, cell: mirroredCell });
+      removals.set(coordinateKey(position), position);
+    }
+  } else if (operation === "replace_type") {
+    const fromFailure = validateBlockType(command.from, "from");
+    if (fromFailure) return failed(revision, fromFailure.error, fromFailure.fieldPath);
+    const toFailure = validateBlockType(command.to, "to");
+    if (toFailure) return failed(revision, toFailure.error, toFailure.fieldPath);
+    const from = command.from as BlockId;
+    const to = command.to as BlockId;
+    const fromKind = blockStateKind(from);
+    const toKind = blockStateKind(to);
+    if (toKind !== "none" && toKind !== fromKind) {
+      return failed(revision, `${to} requires ${toKind} state that ${from} does not carry`, "to");
+    }
+    for (const { position, cell } of sources) {
+      if (cell.block !== from) continue;
+      const nextState = toKind === "none" ? undefined : cell.state;
+      targets.set(coordinateKey(position), { position, cell: buildCell(to, nextState, cell.objectId) });
+    }
+  } else {
+    return failed(revision, "operation must be copy, move, rotate, mirror, or replace_type", "operation");
+  }
+
+  const changes: BlockChange[] = [];
+  for (const [key, position] of removals) {
+    if (targets.has(key)) continue;
+    const before = world.get(position);
+    if (before === null) continue;
+    changes.push(changeFor(position, before, null));
+  }
+  for (const { position, cell } of targets.values()) {
+    const before = world.get(position);
+    if (cellEquals(before, cell)) continue;
+    changes.push(changeFor(position, before, cell));
+  }
+  return commitOrDryRun(world, changes, revision, history, command.dryRun);
+}
+
 export function executeCommand(
   world: MutableArenaWorld,
   command: ArenaCommand,
@@ -164,5 +494,7 @@ export function executeCommand(
   }
   if (command.type === "set_blocks") return executeSetBlocks(world, command, revision, config, history);
   if (command.type === "undo" || command.type === "redo") return executeHistory(world, command, revision, history);
+  if (command.type === "generate_shape") return executeGenerateShape(world, command, revision, config, history);
+  if (command.type === "transform_region") return executeTransformRegion(world, command, revision, config, history);
   return failed(revision, "Unknown arena command type", "type");
 }

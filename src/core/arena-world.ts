@@ -1,8 +1,7 @@
 import type { ArenaConfig } from "./arena-config";
 import { createArenaConfig, DEFAULT_ARENA_CONFIG, DEFAULT_MAX_BATCH_EDITS, DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT, platformSizeForConfig } from "./arena-config";
-import type { ArenaChange, ArenaContext, ArenaEngine, ArenaResult, BlockQuery, BuildSlice, BuildSummary, SliceQuery } from "./arena-engine";
-import type { BlockId } from "./block-types";
-import { PHASE_A_BLOCK_IDS } from "./block-types";
+import type { ArenaChange, ArenaContext, ArenaEngine, ArenaResult, BlockQuery, BuildSlice, BuildSummary, SliceQuery, WorldCell } from "./arena-engine";
+import { ALL_BLOCK_IDS } from "./block-types";
 import { coordinateFromKey, coordinateKey, type Coordinate, type CoordinateKey } from "./coordinates";
 import { executeCommand, type MutableArenaWorld } from "./arena-commands";
 import { HistoryManager } from "./history";
@@ -12,25 +11,25 @@ type SparseArenaWorld = MutableArenaWorld & QueryWorld;
 
 export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CONFIG): ArenaEngine {
   let config: ArenaConfig = initialConfig;
-  const blocks = new Map<CoordinateKey, BlockId>();
+  const blocks = new Map<CoordinateKey, WorldCell>();
   let revision = 0;
   const history = new HistoryManager();
   const listeners = new Set<(change: ArenaChange) => void>();
 
   const world: SparseArenaWorld = {
-    get(position: Coordinate): BlockId | null {
+    get(position: Coordinate): WorldCell | null {
       return blocks.get(coordinateKey(position)) ?? null;
     },
-    set(position: Coordinate, block: BlockId): void {
-      blocks.set(coordinateKey(position), block);
+    set(position: Coordinate, cell: WorldCell): void {
+      blocks.set(coordinateKey(position), cell);
     },
     remove(position: Coordinate): void {
       blocks.delete(coordinateKey(position));
     },
-    entries(): Iterable<{ position: Coordinate; block: BlockId }> {
-      return Array.from(blocks, ([key, block]) => ({
+    entries(): Iterable<{ position: Coordinate; cell: WorldCell }> {
+      return Array.from(blocks, ([key, cell]) => ({
         position: coordinateFromKey(key),
-        block,
+        cell,
       }));
     },
   };
@@ -164,7 +163,7 @@ export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CON
       return Object.freeze({
         bounds: config,
         revision,
-        blockTypes: PHASE_A_BLOCK_IDS,
+        blockTypes: ALL_BLOCK_IDS,
         limits: Object.freeze({
           maxBatchEdits: DEFAULT_MAX_BATCH_EDITS,
           defaultQueryLimit: DEFAULT_QUERY_LIMIT,

@@ -1,0 +1,381 @@
+# Build Arena Phases 4–6 Execution Plan
+
+Reconciled against `docs/BUILD_ARENA_PLAN.md`, `MY_plan.md`, and last commit
+`c5022d2` (two sliders, `resize_platform` / `resize_height`). Locked product
+overrides are listed first so workers do not re-litigate them.
+
+## Locked decisions
+
+- DSL grammar is `block_objectId@x,y,z+(axisCount)` or `block_objectId@x,y,z-(axisCount)`.
+  Example: `oak_planks_1@0,1,0-(x5)`.
+- Count is **total blocks including the origin**. `-(x5)` places five cubes, not origin plus five extra.
+- Keep the last-commit **two sliders**. Do not collapse X/Y/Z into one size.
+  - Platform width (X and Z together): odd integers. Core allows `3…101`. UI slider min is `7`.
+  - Build height (max Y): core allows `1…31`. UI slider min is `7`.
+  - Live editor boots at **51 × 51 platform, maxY 31** (`createArenaConfig(51, 31)`).
+  - Test helper `DEFAULT_ARENA_CONFIG` stays 7×7, maxY 6.
+- Resize stays human-only. WebMCP must **not** expose `resize_arena`, `resize_platform`, or `resize_height`. Agents may **read** current bounds via `get_arena_context`.
+- Shrink that would drop any block still fails atomically and never auto-deletes.
+- Match last-commit history: grow keeps placement undos; shrink **clears** undo history; resize itself returns `undoId: null` (the size change is not an undo step).
+- Unchanged size is a no-op (no revision bump).
+- `set_blocks` stays capped at **256**. Do not invent a 3150 cell cap.
+- Renderer paginates engine reads and grows instance capacity as needed up to current bounds (max platform 101, maxY 31).
+- Shape / transform commands may fill the **current** `ArenaConfig` and must support `dryRun`.
+- Phase 6 export uses **schemaVersion 2** (object ids and block state). schemaVersion 1 full-cube files still import via an explicit migration documented in code.
+
+`MY_plan.md` and `docs/BUILD_ARENA_PLAN.md` still show the older short DSL (`oak_planks_1-(x5)`), unified-or-deferred resize wording, and schemaVersion 1 samples. This file wins for Phases 4–6 until those docs are updated.
+
+- you can create worktress to do wortress and use sub-agents if needed . most task to yourself 
+
+## Summary
+
+```text
+Phase 4: Blueprint JSON stabilization — serial
+    ↓ clean verified commit
+Phase 5: WebMCP contract — serial
+    ↓
+Task 3A/3B/3C — 2 sub-agents and you in parallel
+    ↓
+Task 4: Codex integration — serial
+    ↓
+Phase 6 core commands (shapes, transforms, partials, object groups, blueprint v2) — serial
+    ↓
+Task 3A/3B/3C — 2 sub-agents worktrees and you in parallel
+    ↓
+Task 4: Codex integration — serial
+```
+
+- DSL remains after WebMCP because it consumes `generate_shape`.
+- Plan stops after Phase 6. Phase 7 game/inventory and Phase 8 redstone get separate plans.
+- Parallel sub- agents workers.
+- Codex is core architect: contracts, merge order, conflict resolution and final review.
+- Mayank runs verification commands; workers write tests and report commands.
+- No parallel work starts until the current staged/unstaged Phase 4 changes are clean and committed.
+
+## Worktree rules
+
+- Each parallel worker starts from the same clean contract commit in its own branch/worktree.
+- Workers edit only their assigned files and commit focused changes.
+- Workers never merge, rebase, edit shared contracts, or review other workers.
+- Codex integrates in this order: schema/contract branch → handler branch → test branch.
+- The integration branch may temporarily fail between cherry-picks; main stays untouched until the combined result is reviewed.
+- BuildArenaPage layout and CSS remain unchanged, including the two Slider-panel ranges. Do not remove kickers from palette / history / coordinate inspector. Only remove a `.panel-kicker` if one sits immediately above a sidebar `Layers` / `Activity` / `Slider` subheading (today there is none).
+
+---
+
+## Phase 4 — Blueprint JSON stabilization
+
+### Task 1: Serial blueprint engineer
+
+No parallel work because the existing changes mix React, schema, storage and engine logic.
+
+**Public interfaces**
+
+- `BlueprintV1`
+- `createBlueprint(blocks, identity)`
+- `diffBlueprintBlocks(current, next)`
+- `serializeBlueprintJson(blueprint)`
+- `parseBlueprintJson(text)`
+- `downloadBlueprintJson(blueprint)`
+
+**Prompt**
+
+```text
+Work in the current Build Arena checkout as the Phase 4 blueprint engineer.
+
+Inspect git status, staged diff and working-tree diff first. Preserve the current
+BuildArenaPage JSX, layout, Layers/Activity/Slider arrangement and CSS. Keep both
+odd sliders (platform width and build height) as in the last commit. Do not add,
+remove, or unify resize. Do not change resize_platform / resize_height behaviour.
+
+Finish the existing blueprint modules:
+- src/core/blueprint.ts
+- src/schemas/blueprint.schema.ts
+- src/storage/blueprint-json.ts
+- their focused tests
+
+Requirements:
+- schemaVersion must be 1;
+- serialization must be deterministic;
+- export downloads `.build-arena.json`;
+- import validates JSON Schema plus domain rules;
+- reject protected, duplicate, unsafe and out-of-bounds coordinates;
+- verify size and material counts against blocks;
+- convert a full snapshot to one deterministic edit list;
+- reject imports requiring more than 256 explicit edits;
+- never partially mutate the arena.
+
+Replace BuildArenaPage’s inline parser/diff/export functions with thin calls to
+these modules without changing its visual structure. Do not add WebMCP, DSL,
+or unrelated UI changes.
+
+Write tests but do not run installs, tests, typecheck or build. Re-read every
+changed file and report verification commands and exact git status.
+```
+
+**Gate**
+
+- Exported JSON round-trips with negative X/Z coordinates.
+- Invalid import changes neither blocks nor revision.
+- BuildArenaPage contains no schema, parser or snapshot-diff implementation.
+- Worktree is reviewed, verified by Mayank and committed before Phase 5.
+
+---
+
+## Phase 5 — WebMCP
+
+The current official draft uses `document.modelContext.registerTool(tool, { signal })`; aborting the signal removes page-scoped registrations. Tools should register once and read fresh engine state during execution. [Official WebMCP specification](https://webmachinelearning.github.io/webmcp/), [spec source](https://github.com/webmachinelearning/webmcp/blob/main/index.bs).
+
+### Task 1: Serial WebMCP contract freeze — Codex
+
+Create and commit the shared contract before creating parallel worktrees.
+
+**Starter tools**
+
+- Reads: `get_arena_context`, `get_build_summary`, `query_blocks`, `get_build_slices`
+- Writes: `set_blocks`, `undo_build_change`, `save_blueprint`
+- Deferred: `generate_shape`, `transform_region`, `render_build_views`, DSL
+- Never: any resize tool. Size is human-slider only. Reads already return bounds and revision.
+
+**Contract rules**
+
+- Exact `snake_case` names.
+- `additionalProperties: false`.
+- Writes require `expectedRevision`.
+- Reads return observed revision.
+- Writes return revision, affected blocks/bounds, warnings and `undoId`.
+- `save_blueprint` returns canonical `BlueprintV1`; human download remains a UI action.
+- Thin handlers call `ArenaEngine`; no Three.js/Zustand mutation.
+- Feature-detect `document.modelContext`; normal UI works without it.
+
+### Task 2: Create three worktrees
+
+- `p5/schemas`
+- `p5/handlers`
+- `p5/tests`
+
+All branch from the WebMCP contract commit.
+
+### Task 3A: Schema engineer — parallel
+
+```text
+Own only src/webmcp/tool-schemas.ts and src/webmcp/tool-results.ts.
+
+Implement JSON Schemas and typed result builders for the seven frozen Phase 5
+tools. Reuse shared core/blueprint types and the frozen tool contract. Every
+property needs type and description; reject extra properties; cap query/edit
+arrays; require expectedRevision for writes. Read tools are marked read-only in
+metadata supplied to registration later.
+
+Do not implement handlers, registration, React hooks, DSL, resize, or tests.
+Do not change shared contracts. Commit only owned files and report commands.
+```
+
+### Task 3B: Handler engineer — parallel
+
+```text
+Own only src/webmcp/tool-handlers.ts.
+
+Implement thin handler factories for the seven frozen tools. Each handler reads
+fresh ArenaEngine state when invoked. Writes call engine.apply exactly once.
+save_blueprint uses the Phase 4 blueprint modules. No JSON Schema definitions,
+registration lifecycle, voxel math, Three.js, Zustand, browser download, DSL,
+or resize.
+
+Do not alter contracts or tests. Commit only the handler file and report
+commands.
+```
+
+### Task 3C: Test engineer — parallel
+
+```text
+Own only src/webmcp/*.test.ts and test helpers under src/webmcp/test/.
+
+Write contract-first tests against the frozen module paths. Cover:
+- schemas reject additional fields;
+- reads never mutate revision;
+- writes require expectedRevision;
+- stale writes fail atomically;
+- handlers call the shared engine;
+- save_blueprint returns schemaVersion 1;
+- missing document.modelContext is harmless;
+- AbortController cleanup removes registrations;
+- no resize tool is registered.
+
+Do not modify production files to make isolated tests pass. The branch may stay
+red until schema/handler branches are integrated. Commit tests only.
+```
+
+### Task 4: Serial integration — Codex core architect
+
+```text
+Integrate Phase 5 schema, handler and test commits in that order.
+
+Create registration/lifecycle wiring and minimal browser typings. Register tools
+only while Build Arena is mounted, using one AbortController. Feature-detect
+document.modelContext, abort on cleanup, and never re-register on block/revision
+changes. Connect handlers, schemas, annotations and result shapes without moving
+logic into BuildArenaPage.
+
+Resolve contract conflicts, review every diff yourself, remove duplication and
+preserve the current frontend including both sliders. Do not add Phase 6 tools,
+DSL, or any resize tool.
+```
+
+**Phase 5 gate**
+
+- Supported browser agent can inspect, edit, re-read, undo and request a blueprint.
+- Unsupported browsers retain the complete human editor, including both size sliders.
+- No WebMCP mutation bypasses `ArenaEngine`.
+- Agent cannot change platform size or height.
+
+---
+
+## Phase 6 — Advanced operations, partial blocks and DSL
+
+Human resize already exists. Phase 6 does **not** invent a third resize model.
+Freeze the last-commit resize contract, then add shapes, transforms, partials,
+object groups, DSL, and blueprint v2.
+
+### Task 1: Serial core foundation — Codex
+
+Freeze and implement the shared Phase 6 contracts before parallel branches.
+
+**Arena size (already in last commit — freeze, do not rewrite)**
+
+- Two independent human controls, already wired:
+  - `resizePlatform(platformSize)` — odd X/Z width, centred on 0.
+  - `resizeHeight(buildHeight)` — max Y.
+- Core limits: platform `3, 5, …, 101`; height `1…31`.
+- UI sliders: platform min 7 / max 101; height min 7 / max 31.
+- Editor start: 51 × 51, maxY 31. Platform stays implicit at `y = 0`.
+- Shrink rejects if any block would fall outside; never auto-delete.
+- Grow: revisioned; placement undo history kept; size change itself is not undoable.
+- Shrink: revisioned; undo history cleared; size change itself is not undoable.
+- No-op when unchanged.
+- WebMCP must not call these methods.
+
+**Advanced commands (new)**
+
+- `generate_shape`: floor, wall, filled box, hollow box. Roofs stay later.
+- `transform_region`: copy, move, rotate, mirror, replace type.
+- History records block and object-group changes atomically. Config/size history stays as in the last commit (not a user-undoable resize step).
+
+**Partial block contract**
+
+- IDs: `water`, `lava`, `oak_slab`, `oak_stairs`, `oak_fence`, `stone_wall`, `oak_trapdoor`
+- Slab: top/bottom.
+- Stairs: facing, top/bottom, initially straight.
+- Trapdoor: facing, top/bottom, open.
+- Fence/wall connections derive from neighbours.
+- Water/lava are static visuals.
+
+**Persistent object grouping**
+
+- Blocks may carry `objectId`.
+- DSL/shape group IDs persist into blueprint JSON and Layers.
+- Reusing an existing group appends only when its block type is compatible.
+- Transforms and undo/redo preserve grouping.
+
+**Blueprint v2**
+
+- Export `schemaVersion: 2` with object ids and block state.
+- Import still accepts schemaVersion 1 full-cube files; migrate in one documented function.
+- Never leave a half-migrated world.
+
+Commit this foundation, then branch the three Phase 6 worktrees (`p6/dsl`, `p6/renderer`, `p6/webmcp`).
+
+### Task 3A: DSL engineer — parallel
+
+```text
+Own only src/core/pattern-dsl.ts and its tests.
+
+Implement this exact grammar:
+`block_objectId@x,y,z+(axisCount)` or `block_objectId@x,y,z-(axisCount)`
+Example: `oak_planks_1@0,1,0-(x5)`.
+
+Count means five total blocks including the origin. Object grouping persists.
+Parse into the existing generate_shape command; never mutate the world directly.
+Reject malformed ids, unsafe coordinates, invalid axes/counts, bounds overflow
+and incompatible existing groups before mutation. Return field-level errors.
+
+Do not change renderer, WebMCP, shared contracts, resize, or history.
+```
+
+### Task 3B: Partial-block renderer engineer — parallel
+
+```text
+Own partial block geometry/state rendering files under src/render/ plus focused
+tests.
+
+Render slabs, stairs, fences, walls, trapdoors, static water and static lava from
+the frozen Phase 6 block-state contract. Derive fence/wall connections from
+neighbour queries. Update coordinate selection/raycasting and dispose every GPU
+resource. Paginate engine reads. Grow InstancedMesh capacity as needed for the
+current arena (up to platform 101 and maxY 31). Do not hard-cap at 3150.
+
+Do not change core contracts, DSL, WebMCP, sliders, or BuildArenaPage layout.
+```
+
+### Task 3C: Advanced WebMCP engineer — parallel
+
+```text
+Own only Phase 6 additions under src/webmcp/.
+
+Add schemas and thin handlers for generate_shape, transform_region and
+render_build_views. Accept the frozen DSL string where generate_shape permits
+it. Require expectedRevision; large writes support dryRun; return affected
+bounds/count/revision/objectId/undoId. Structured queries remain source of
+truth; render_build_views returns view metadata instead of dumping images.
+
+Do not add any resize tool. Do not call resizePlatform or resizeHeight.
+Do not change core commands, DSL parser, renderer, sliders, or existing
+Phase 5 behavior.
+```
+
+### Task 4: Serial integration — Codex core architect
+
+```text
+Integrate DSL, partial renderer and advanced WebMCP branches onto the Phase 6
+foundation.
+
+Leave both sliders visually unchanged. They already call revisioned
+resizePlatform / resizeHeight. Populate the current Layers panel from
+persistent object groups. Do not otherwise redesign BuildArenaPage.
+
+Resolve block-state, pagination, capacity, history and blueprint migration
+conflicts. Review all code yourself. Ensure schemaVersion 1 full-cube
+blueprints still import; export schemaVersion 2 with object/state data through
+the documented migration function.
+```
+
+**Phase 6 gate**
+
+- Human two-slider resize still works: odd platform through 101, height through 31, centred, shrink fails atomically if blocks would clip.
+- Agent cannot change size; agent can still generate/transform inside current bounds.
+- DSL example `oak_planks_1@0,1,0-(x5)` creates exactly five grouped blocks.
+- Layers displays persistent objects.
+- Partial blocks rotate/render correctly.
+- schemaVersion 1 houses still import; new exports are schemaVersion 2.
+- A useful house can be created without placing every cube individually.
+
+---
+
+## Verification and later phases
+
+Mayank runs at each gate:
+
+```bash
+npm test -- src/core src/storage src/schemas src/webmcp src/render src/state
+npm run typecheck
+npm run build
+npm run dev
+```
+
+Manual WebMCP QA uses an HTTPS-supported preview browser with the current testing feature enabled.
+
+After Phase 6:
+
+- **Phase 7:** blueprint inventory, thumbnails, Game tab, ghost placement, collision checks, rotate/mirror and atomic placement.
+- **Phase 8:** optional bounded redstone simulator, tick scheduler, signal propagation and diagnostics.
+- Neither begins until Phase 6 evidence is reviewed and a new plan is approved.

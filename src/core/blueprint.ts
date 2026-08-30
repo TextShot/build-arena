@@ -1,9 +1,36 @@
 import type { BlockEdit } from "./arena-engine";
-import { PHASE_A_BLOCK_IDS, type Block, type BlockCounts, type BlockId } from "./block-types";
+import {
+  ALL_BLOCK_IDS,
+  blockStateEquals,
+  PHASE_A_BLOCK_IDS,
+  type Block,
+  type BlockCounts,
+  type BlockId,
+} from "./block-types";
 import { coordinateKey, type CoordinateKey } from "./coordinates";
 
+/**
+ * Version 1 wire format: full cubes only, Phase A materials, no state or
+ * object groups. Still accepted on import through migrateBlueprintV1ToV2.
+ */
 export type BlueprintV1 = Readonly<{
   schemaVersion: 1;
+  id: string;
+  name: string;
+  size: Readonly<{ x: number; y: number; z: number }>;
+  anchor: Readonly<{ x: 0; y: 0; z: 0 }>;
+  blocks: readonly Readonly<{
+    position: Readonly<{ x: number; y: number; z: number }>;
+    block: (typeof PHASE_A_BLOCK_IDS)[number];
+  }>[];
+  blockSummary: Readonly<Record<(typeof PHASE_A_BLOCK_IDS)[number], number>>;
+  validation: Readonly<{ errors: 0; warnings: readonly string[] }>;
+  preview: Readonly<{ view: "isometric" }>;
+}>;
+
+/** Version 2 adds optional block state and persistent objectId grouping. */
+export type BlueprintV2 = Readonly<{
+  schemaVersion: 2;
   id: string;
   name: string;
   size: Readonly<{ x: number; y: number; z: number }>;
@@ -23,7 +50,17 @@ function compareBlocks(left: Block, right: Block): number {
 }
 
 function emptyBlockCounts(): Record<BlockId, number> {
-  return Object.fromEntries(PHASE_A_BLOCK_IDS.map((blockId) => [blockId, 0])) as Record<BlockId, number>;
+  return Object.fromEntries(ALL_BLOCK_IDS.map((blockId) => [blockId, 0])) as Record<BlockId, number>;
+}
+
+function copyBlock(block: Block): Block {
+  const copy: Record<string, unknown> = {
+    position: Object.freeze({ ...block.position }),
+    block: block.block,
+  };
+  if (block.state) copy.state = Object.freeze({ ...block.state });
+  if (block.objectId) copy.objectId = block.objectId;
+  return Object.freeze(copy) as Block;
 }
 
 function copyBlocks(blocks: readonly Block[]): readonly Block[] {
@@ -32,7 +69,7 @@ function copyBlocks(blocks: readonly Block[]): readonly Block[] {
     const key = coordinateKey(block.position);
     if (seen.has(key)) throw new Error(`Duplicate blueprint coordinate: ${key}`);
     seen.add(key);
-    return Object.freeze({ position: Object.freeze({ ...block.position }), block: block.block });
+    return copyBlock(block);
   });
   return Object.freeze(copies.sort(compareBlocks));
 }
@@ -40,7 +77,7 @@ function copyBlocks(blocks: readonly Block[]): readonly Block[] {
 export function createBlueprint(
   blocks: readonly Block[],
   identity: BlueprintIdentity,
-): BlueprintV1 {
+): BlueprintV2 {
   const sortedBlocks = copyBlocks(blocks);
   const blockSummary = emptyBlockCounts();
   for (const block of sortedBlocks) blockSummary[block.block] += 1;
@@ -48,7 +85,7 @@ export function createBlueprint(
   const size = getBlueprintSize(sortedBlocks);
 
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: identity.id,
     name: identity.name,
     size: Object.freeze(size),
@@ -57,6 +94,23 @@ export function createBlueprint(
     blockSummary: Object.freeze(blockSummary),
     validation: Object.freeze({ errors: 0, warnings: Object.freeze([]) }),
     preview: Object.freeze({ view: "isometric" }),
+  });
+}
+
+/**
+ * Explicit schema-version migration decision: version 1 blueprints contain
+ * only stateless Phase A full cubes, so migration is purely additive — copy
+ * the blocks unchanged and extend the material summary with zero counts for
+ * every block id introduced after version 1. Exports always use version 2.
+ */
+export function migrateBlueprintV1ToV2(blueprint: BlueprintV1): BlueprintV2 {
+  const migrated = createBlueprint(blueprint.blocks, { id: blueprint.id, name: blueprint.name });
+  return Object.freeze({
+    ...migrated,
+    validation: Object.freeze({
+      errors: 0,
+      warnings: Object.freeze([...blueprint.validation.warnings]),
+    }),
   });
 }
 
@@ -79,6 +133,17 @@ function getBlueprintSize(blocks: readonly Block[]): { x: number; y: number; z: 
   return { x: maxX - minX + 1, y: maxY - minY + 1, z: maxZ - minZ + 1 };
 }
 
+function sameBlock(a: Block, b: Block): boolean {
+  return a.block === b.block && blockStateEquals(a.state, b.state) && a.objectId === b.objectId;
+}
+
+function editFor(action: "place" | "replace", block: Block): BlockEdit {
+  const edit: Record<string, unknown> = { action, position: block.position, block: block.block };
+  if (block.state) edit.state = block.state;
+  if (block.objectId) edit.objectId = block.objectId;
+  return edit as BlockEdit;
+}
+
 export function diffBlueprintBlocks(
   currentBlocks: readonly Block[],
   nextBlocks: readonly Block[],
@@ -94,10 +159,8 @@ export function diffBlueprintBlocks(
   const edits: BlockEdit[] = [];
   for (const [key, block] of next) {
     const existing = current.get(key);
-    if (!existing) edits.push({ action: "place", position: block.position, block: block.block });
-    else if (existing.block !== block.block) {
-      edits.push({ action: "replace", position: block.position, block: block.block });
-    }
+    if (!existing) edits.push(editFor("place", block));
+    else if (!sameBlock(existing, block)) edits.push(editFor("replace", block));
   }
   for (const [key, block] of current) {
     if (!next.has(key)) edits.push({ action: "remove", position: block.position });

@@ -11,7 +11,7 @@ describe("blueprint core", () => {
     ];
 
     expect(createBlueprint(blocks, { id: "arena-build", name: "Arena Build" })).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: "arena-build",
       name: "Arena Build",
       size: { x: 3, y: 2, z: 3 },

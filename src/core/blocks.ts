@@ -3,7 +3,7 @@ import type { BlockId } from "./block-types";
 export type BlockCatalogueEntry = Readonly<{
   id: BlockId;
   label: string;
-  fullCube: true;
+  fullCube: boolean;
 }>;
 
 export const BLOCK_CATALOGUE = Object.freeze({
@@ -14,4 +14,11 @@ export const BLOCK_CATALOGUE = Object.freeze({
   leaves: Object.freeze({ id: "leaves", label: "Leaves", fullCube: true }),
   glass: Object.freeze({ id: "glass", label: "Glass", fullCube: true }),
   obsidian: Object.freeze({ id: "obsidian", label: "Obsidian", fullCube: true }),
+  water: Object.freeze({ id: "water", label: "Water", fullCube: false }),
+  lava: Object.freeze({ id: "lava", label: "Lava", fullCube: false }),
+  oak_slab: Object.freeze({ id: "oak_slab", label: "Oak slab", fullCube: false }),
+  oak_stairs: Object.freeze({ id: "oak_stairs", label: "Oak stairs", fullCube: false }),
+  oak_fence: Object.freeze({ id: "oak_fence", label: "Oak fence", fullCube: false }),
+  stone_wall: Object.freeze({ id: "stone_wall", label: "Stone wall", fullCube: false }),
+  oak_trapdoor: Object.freeze({ id: "oak_trapdoor", label: "Oak trapdoor", fullCube: false }),
 } satisfies Record<BlockId, BlockCatalogueEntry>);

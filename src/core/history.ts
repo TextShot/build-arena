@@ -7,9 +7,8 @@ export type HistoryEntry = Readonly<{
 
 function freezeChanges(changes: readonly BlockChange[]): readonly BlockChange[] {
   return Object.freeze(changes.map((change) => Object.freeze({
+    ...change,
     position: Object.freeze({ ...change.position }),
-    before: change.before,
-    after: change.after,
   })));
 }
 

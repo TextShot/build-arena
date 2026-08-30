@@ -1,6 +1,6 @@
 import type { ArenaConfig } from "./arena-config";
 import { MAX_QUERY_LIMIT } from "./arena-config";
-import { isBlockId } from "./block-types";
+import { isBlockId, isObjectId } from "./block-types";
 import type { BlockQuery, SliceQuery } from "./arena-engine";
 import type { Coordinate } from "./coordinates";
 
@@ -79,7 +79,14 @@ export function validateBounds(value: unknown, config: ArenaConfig, fieldPath: s
 }
 
 export function validateBlockType(value: unknown, fieldPath: string): ValidationFailure | null {
-  return isBlockId(value) ? null : failure("Unknown Phase A block id", fieldPath);
+  return isBlockId(value) ? null : failure("Unknown block id", fieldPath);
+}
+
+export function validateObjectId(value: unknown, fieldPath: string): ValidationFailure | null {
+  if (value === undefined) return null;
+  return isObjectId(value)
+    ? null
+    : failure("objectId must be 1-64 letters, digits, underscores, or dashes", fieldPath);
 }
 
 export function validateQuery(value: BlockQuery, config: ArenaConfig): ValidationFailure | null {
