@@ -49,6 +49,20 @@ test("plain HTML shows recovery when the Arena bundle cannot load", async ({ pag
   expect(consoleErrors.length).toBeGreaterThan(0);
 });
 
+test("plain HTML shows recovery when the Play Space bundle cannot load", async ({ page }) => {
+  const consoleErrors = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  await page.route(/\/assets\/playSpace-[^/]+\.js$/, (route) => route.abort());
+
+  await page.goto("MINECRAFT_3D/index.html", { waitUntil: "domcontentloaded" });
+  const recovery = page.locator("#startup-recovery");
+  await expect(recovery).toBeVisible();
+  await expect(recovery).toContainText("Play Space could not start");
+  expect(consoleErrors.length).toBeGreaterThan(0);
+});
+
 test("Play Space starts from the GitHub Pages base path", async ({ page }) => {
   const errors = captureStartupErrors(page);
   await page.goto("MINECRAFT_3D/index.html", { waitUntil: "networkidle" });

@@ -1,15 +1,16 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
+import { pagesRepoName } from "./scripts/pages-base.mjs";
+
 // Block PNGs live in `assets/assets`. Relative aliases are treated as npm
 // packages; Vite needs an absolute filesystem path.
 const blockPngDir = decodeURI(new URL("./assets/assets", import.meta.url).pathname);
 
 // Local `npm run dev` / `npm run build` stay at `/`. GitHub Pages is a project
-// site: https://USER.github.io/build-arena/ so CI must prefix every asset.
+// site: https://USER.github.io/<repo>/ so CI must prefix every asset.
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
-const pagesRepo = env?.GITHUB_REPOSITORY?.split("/")[1] ?? "build-arena";
-const base = env?.GITHUB_PAGES === "true" ? `/${pagesRepo}/` : "/";
+const base = env?.GITHUB_PAGES === "true" ? `/${pagesRepoName()}/` : "/";
 
 export default defineConfig({
   base,

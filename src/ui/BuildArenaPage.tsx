@@ -189,7 +189,6 @@ export function BuildArenaPage() {
       rendererInstance.current = null;
       arenaRenderer?.dispose();
       setRendererError("3D graphics could not start. Enable hardware acceleration or try Chrome.");
-      setSpaceReady(true);
       return;
     }
     const mountedRenderer = arenaRenderer;

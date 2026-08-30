@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { pagesSmokeBaseUrl, pagesSmokeRoot } from "./scripts/pages-base.mjs";
+
+const pagesBaseUrl = pagesSmokeBaseUrl();
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -8,7 +12,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173/build-arena/",
+    baseURL: pagesBaseUrl,
     trace: "retain-on-failure",
   },
   projects: [
@@ -23,8 +27,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "python3 -m http.server 4173 --directory /tmp/build-arena-pages-smoke",
-    url: "http://127.0.0.1:4173/build-arena/",
+    command: `node scripts/stage-pages.mjs && python3 -m http.server 4173 --directory ${pagesSmokeRoot()}`,
+    url: pagesBaseUrl,
     reuseExistingServer: false,
     timeout: 15_000,
   },

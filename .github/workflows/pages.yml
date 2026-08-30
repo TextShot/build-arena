@@ -44,13 +44,8 @@ jobs:
       - name: Install smoke-test browser
         run: npx playwright install --with-deps chromium
 
-      - name: Stage GitHub Pages path
-        run: |
-          mkdir -p /tmp/build-arena-pages-smoke/build-arena
-          cp -R dist/. /tmp/build-arena-pages-smoke/build-arena/
-
       - name: Browser smoke test
-        run: npx playwright test
+        run: npm run smoke:pages
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -11,7 +11,9 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
     "strict": true,
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "scripts/pages-base.mjs"]
 }
