@@ -9,6 +9,8 @@ function pickUiState(store: UiStore): UiState {
     cameraPreset: store.cameraPreset,
     sidebarCollapsed: store.sidebarCollapsed,
     activeSidebarPanel: store.activeSidebarPanel,
+    jsonMode: store.jsonMode,
+    platformSize: store.platformSize,
   };
 }
 
@@ -22,8 +24,10 @@ describe("useUiStore", () => {
       selectedBlock: "stone",
       selectedCoordinate: null,
       cameraPreset: "iso",
-      sidebarCollapsed: true,
-      activeSidebarPanel: "controls",
+      sidebarCollapsed: false,
+      activeSidebarPanel: "layers",
+      jsonMode: false,
+      platformSize: 7,
     });
     expect(pickUiState(useUiStore.getState())).toEqual(DEFAULT_UI_STATE);
   });
@@ -35,15 +39,19 @@ describe("useUiStore", () => {
     getState().setSelectedBlock("oak_planks");
     getState().setSelectedCoordinate(coordinate);
     getState().setCameraPreset("top");
-    getState().setSidebarCollapsed(false);
-    getState().setActiveSidebarPanel("layers");
+    getState().setSidebarCollapsed(true);
+    getState().setActiveSidebarPanel("slider");
+    getState().setJsonMode(true);
+    getState().setPlatformSize(8);
 
     expect(pickUiState(getState())).toEqual({
       selectedBlock: "oak_planks",
       selectedCoordinate: { x: -1, y: 2, z: 3 },
       cameraPreset: "top",
-      sidebarCollapsed: false,
-      activeSidebarPanel: "layers",
+      sidebarCollapsed: true,
+      activeSidebarPanel: "slider",
+      jsonMode: true,
+      platformSize: 9,
     });
   });
 
@@ -53,8 +61,10 @@ describe("useUiStore", () => {
     getState().setSelectedBlock("glass");
     getState().setSelectedCoordinate({ x: 0, y: 1, z: 0 });
     getState().setCameraPreset("right");
-    getState().setSidebarCollapsed(false);
+    getState().setSidebarCollapsed(true);
     getState().setActiveSidebarPanel("activity");
+    getState().setJsonMode(true);
+    getState().setPlatformSize(3);
     getState().resetUiState();
 
     expect(pickUiState(getState())).toEqual(DEFAULT_UI_STATE);

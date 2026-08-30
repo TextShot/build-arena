@@ -4,7 +4,11 @@ import type { BlockId } from "../core/block-types";
 import type { Coordinate } from "../core/coordinates";
 
 export type CameraPreset = "iso" | "top" | "front" | "right";
-export type SidebarPanel = "controls" | "layers" | "json" | "activity";
+export type SidebarPanel = "layers" | "activity" | "slider";
+
+const SIDEBAR_COLLAPSED_KEY = "build-arena.sidebarCollapsed";
+const ODD_PLATFORM_MIN = 3;
+const ODD_PLATFORM_MAX = 15;
 
 export type UiState = Readonly<{
   selectedBlock: BlockId;
@@ -12,6 +16,9 @@ export type UiState = Readonly<{
   cameraPreset: CameraPreset;
   sidebarCollapsed: boolean;
   activeSidebarPanel: SidebarPanel;
+  jsonMode: boolean;
+  /** Odd cube size shared by X, Y, and Z. */
+  platformSize: number;
 }>;
 
 export type UiActions = Readonly<{
@@ -20,6 +27,8 @@ export type UiActions = Readonly<{
   setCameraPreset: (cameraPreset: CameraPreset) => void;
   setSidebarCollapsed: (sidebarCollapsed: boolean) => void;
   setActiveSidebarPanel: (activeSidebarPanel: SidebarPanel) => void;
+  setJsonMode: (jsonMode: boolean) => void;
+  setPlatformSize: (platformSize: number) => void;
   resetUiState: () => void;
 }>;
 
@@ -29,9 +38,36 @@ export const DEFAULT_UI_STATE: UiState = Object.freeze({
   selectedBlock: "stone",
   selectedCoordinate: null,
   cameraPreset: "iso",
-  sidebarCollapsed: true,
-  activeSidebarPanel: "controls",
+  sidebarCollapsed: false,
+  activeSidebarPanel: "layers",
+  jsonMode: false,
+  platformSize: 7,
 });
+
+function readPersistedCollapsed(): boolean {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+  } catch {
+    /* ignore quota / private-mode failures */
+  }
+  return DEFAULT_UI_STATE.sidebarCollapsed;
+}
+
+function persistCollapsed(sidebarCollapsed: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
+  } catch {
+    /* ignore quota / private-mode failures */
+  }
+}
+
+function snapOdd(value: number): number {
+  const rounded = Math.round(value);
+  const odd = rounded % 2 === 0 ? rounded + 1 : rounded;
+  return Math.min(ODD_PLATFORM_MAX, Math.max(ODD_PLATFORM_MIN, odd));
+}
 
 function copyCoordinate(coordinate: Coordinate | null): Coordinate | null {
   if (coordinate === null) {
@@ -43,11 +79,20 @@ function copyCoordinate(coordinate: Coordinate | null): Coordinate | null {
 
 export const useUiStore = create<UiStore>()((set) => ({
   ...DEFAULT_UI_STATE,
+  sidebarCollapsed: readPersistedCollapsed(),
   setSelectedBlock: (selectedBlock) => set({ selectedBlock }),
   setSelectedCoordinate: (selectedCoordinate) =>
     set({ selectedCoordinate: copyCoordinate(selectedCoordinate) }),
   setCameraPreset: (cameraPreset) => set({ cameraPreset }),
-  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+  setSidebarCollapsed: (sidebarCollapsed) => {
+    persistCollapsed(sidebarCollapsed);
+    set({ sidebarCollapsed });
+  },
   setActiveSidebarPanel: (activeSidebarPanel) => set({ activeSidebarPanel }),
-  resetUiState: () => set({ ...DEFAULT_UI_STATE }),
+  setJsonMode: (jsonMode) => set({ jsonMode }),
+  setPlatformSize: (platformSize) => set({ platformSize: snapOdd(platformSize) }),
+  resetUiState: () => {
+    persistCollapsed(DEFAULT_UI_STATE.sidebarCollapsed);
+    set({ ...DEFAULT_UI_STATE });
+  },
 }));

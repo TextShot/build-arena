@@ -1,35 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ArenaResult, BlockEdit, BuildSummary } from "../core/arena-engine";
-import { PHASE_A_BLOCK_IDS } from "../core/block-types";
-import type { Coordinate } from "../core/coordinates";
+import type { ArenaEngine, ArenaResult, Block, BlockEdit, BuildSummary } from "../core/arena-engine";
+import { isBlockId } from "../core/block-types";
+import { coordinateKey, type Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
 import { ArenaRenderer } from "../render/three-renderer";
 import { type CameraPreset, type SidebarPanel, useUiStore } from "../state/ui-store";
-import { ArenaControls } from "./ArenaControls";
 import { BlockPalette } from "./BlockPalette";
-import { CoordinateInspector } from "./CoordinateInspector";
-import { HistoryControls } from "./HistoryControls";
-import { ValidationPanel, type ValidationNotice } from "./ValidationPanel";
+
+type ActivityActor = "you" | "agent";
 
 type ActivityEntry = Readonly<{
   id: number;
-  message: string;
+  time: string;
+  actor: ActivityActor;
+  name: string;
+  success: boolean;
+  revision: number;
+  payload: string;
 }>;
 
 const CAMERA_PRESETS: readonly CameraPreset[] = ["iso", "top", "front", "right"];
-const SIDEBAR_PANELS: readonly SidebarPanel[] = ["controls", "layers", "json", "activity"];
+const SIDEBAR_PANELS: readonly SidebarPanel[] = ["layers", "activity", "slider"];
 
 export function BuildArenaPage() {
   const [engine] = useState(() => createArenaEngine());
   const [summary, setSummary] = useState<BuildSummary>(() => engine.getSummary());
-  const [notice, setNotice] = useState<ValidationNotice>({
-    tone: "neutral",
-    message: "Select a cell, choose a block, then apply one bounded edit.",
-  });
-  const [activity, setActivity] = useState<readonly ActivityEntry[]>([
-    { id: 0, message: "Arena ready at revision 0." },
+  const [activity, setActivity] = useState<readonly ActivityEntry[]>(() => [
+    {
+      id: 0,
+      time: clock(),
+      actor: "you",
+      name: "arena.ready",
+      success: true,
+      revision: 0,
+      payload: "{}",
+    },
   ]);
+  const [jsonDraft, setJsonDraft] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState("Click place \ndouble-click remove\nRight-click select");
   const nextActivityId = useRef(1);
   const rendererHost = useRef<HTMLDivElement>(null);
   const rendererInstance = useRef<ArenaRenderer | null>(null);
@@ -39,28 +49,111 @@ export function BuildArenaPage() {
   const cameraPreset = useUiStore((state) => state.cameraPreset);
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const activeSidebarPanel = useUiStore((state) => state.activeSidebarPanel);
+  const jsonMode = useUiStore((state) => state.jsonMode);
+  const platformSize = useUiStore((state) => state.platformSize);
   const setSelectedBlock = useUiStore((state) => state.setSelectedBlock);
-  const setSelectedCoordinate = useUiStore((state) => state.setSelectedCoordinate);
-  const setCameraPreset = useUiStore((state) => state.setCameraPreset);
-  const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed);
   const setActiveSidebarPanel = useUiStore((state) => state.setActiveSidebarPanel);
+  const setJsonMode = useUiStore((state) => state.setJsonMode);
+  const setPlatformSize = useUiStore((state) => state.setPlatformSize);
+  const setCameraPreset = useUiStore((state) => state.setCameraPreset);
 
-  const addActivity = useCallback((message: string) => {
-    const entry = { id: nextActivityId.current, message };
+  const addActivity = useCallback((entry: Omit<ActivityEntry, "id" | "time">) => {
+    const next = { id: nextActivityId.current, time: clock(), ...entry };
     nextActivityId.current += 1;
-    setActivity((current) => [entry, ...current].slice(0, 30));
+    setActivity((current) => [next, ...current].slice(0, 40));
   }, []);
 
   useEffect(() => engine.subscribe((change) => {
     setSummary(engine.getSummary());
-    addActivity(`${formatCommand(change.commandType)} committed ${change.affectedBlocks} block${change.affectedBlocks === 1 ? "" : "s"}; revision ${change.revision}.`);
+    addActivity({
+      actor: "you",
+      name: change.commandType,
+      success: true,
+      revision: change.revision,
+      payload: JSON.stringify({
+        affectedBlocks: change.affectedBlocks,
+        undoId: change.undoId,
+      }),
+    });
   }), [addActivity, engine]);
+
+  const inspectCell = useCallback((coordinate: Coordinate) => {
+    useUiStore.getState().setSelectedCoordinate(coordinate);
+    const occupant = blockAt(engine, coordinate);
+    setStatusMessage(`${formatCoord(coordinate)} — ${occupant ?? "empty"}`);
+  }, [engine]);
+
+  const placeCell = useCallback((coordinate: Coordinate) => {
+    const block = useUiStore.getState().selectedBlock;
+    const result = engine.apply({
+      type: "set_blocks",
+      expectedRevision: engine.getContext().revision,
+      edits: [{ action: "place", position: coordinate, block }],
+    });
+    setSummary(engine.getSummary());
+    if (result.success) {
+      setStatusMessage(formatCoord(coordinate));
+      if (result.affectedBlocks === 0) {
+        addActivity({
+          actor: "you",
+          name: "place",
+          success: true,
+          revision: result.revision,
+          payload: JSON.stringify({ position: coordinate, block }),
+        });
+      }
+      return;
+    }
+    setStatusMessage(result.error);
+    addActivity({
+      actor: "you",
+      name: "place",
+      success: false,
+      revision: result.revision,
+      payload: JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
+    });
+  }, [addActivity, engine]);
+
+  const removeCell = useCallback((coordinate: Coordinate) => {
+    const result = engine.apply({
+      type: "set_blocks",
+      expectedRevision: engine.getContext().revision,
+      edits: [{ action: "remove", position: coordinate }],
+    });
+    setSummary(engine.getSummary());
+    if (result.success) {
+      setStatusMessage(formatCoord(coordinate));
+      if (result.affectedBlocks === 0) {
+        addActivity({
+          actor: "you",
+          name: "remove",
+          success: true,
+          revision: result.revision,
+          payload: JSON.stringify({ position: coordinate }),
+        });
+      }
+      return;
+    }
+    setStatusMessage(result.error);
+    addActivity({
+      actor: "you",
+      name: "remove",
+      success: false,
+      revision: result.revision,
+      payload: JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
+    });
+  }, [addActivity, engine]);
 
   useEffect(() => {
     const host = rendererHost.current;
     if (!host) return;
     const arenaRenderer = new ArenaRenderer(host, engine, {
-      onSelect: (coordinate) => useUiStore.getState().setSelectedCoordinate(coordinate),
+      // Agent / WebMCP stubs. Clicks use onPlace / onRemove / onSelect.
+      onEdit: (coordinate) => placeCell(coordinate),
+      onInspect: (coordinate) => inspectCell(coordinate),
+      onPlace: (coordinate) => placeCell(coordinate),
+      onRemove: (coordinate) => removeCell(coordinate),
+      onSelect: (coordinate) => inspectCell(coordinate),
     });
     rendererInstance.current = arenaRenderer;
     arenaRenderer.setCameraPreset(useUiStore.getState().cameraPreset);
@@ -77,69 +170,131 @@ export function BuildArenaPage() {
     [selectedCoordinate],
   );
 
-  const handleResult = (result: ArenaResult, action: string) => {
+  const currentBlocks = engine.queryBlocks({ limit: 500 }).blocks;
+  const blueprintText = JSON.stringify({ revision: summary.revision, blocks: currentBlocks }, null, 2);
+
+  useEffect(() => {
+    if (!jsonMode) {
+      setJsonDraft(blueprintText);
+      setJsonError(null);
+    }
+  }, [blueprintText, jsonMode]);
+
+  const handleResult = (result: ArenaResult, name: string, payload: string) => {
     setSummary(engine.getSummary());
     if (result.success) {
-      const changed = result.affectedBlocks > 0;
-      setNotice({
-        tone: changed ? "success" : "neutral",
-        message: changed
-          ? `${action} changed ${result.affectedBlocks} block${result.affectedBlocks === 1 ? "" : "s"}.`
-          : `${action} was a valid no-op; revision remains ${result.revision}.`,
-      });
-      if (!changed) addActivity(`${action} completed with no world change.`);
+      if (result.affectedBlocks === 0) {
+        addActivity({ actor: "you", name, success: true, revision: result.revision, payload });
+      }
       return;
     }
-    const location = result.fieldPath ? ` (${result.fieldPath})` : "";
-    setNotice({ tone: "error", message: `${result.error}${location}` });
-    addActivity(`${action} rejected: ${result.error}${location}.`);
-  };
-
-  const applyEdit = (action: BlockEdit["action"]) => {
-    if (!selectedCoordinate) {
-      setNotice({ tone: "error", message: "Select a coordinate before editing." });
-      return;
-    }
-    const edit: BlockEdit = action === "remove"
-      ? { action, position: selectedCoordinate }
-      : { action, position: selectedCoordinate, block: selectedBlock };
-    const result = engine.apply({
-      type: "set_blocks",
-      expectedRevision: engine.getContext().revision,
-      edits: [edit],
+    addActivity({
+      actor: "you",
+      name,
+      success: false,
+      revision: result.revision,
+      payload: JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
     });
-    handleResult(result, formatCommand(action));
   };
 
   const applyHistory = (type: "undo" | "redo") => {
     const result = engine.apply({ type, expectedRevision: engine.getContext().revision });
-    handleResult(result, formatCommand(type));
+    handleResult(result, type, "{}");
   };
 
-  const currentBlocks = engine.queryBlocks({ limit: 500 }).blocks;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+      if (event.key === "]") {
+        event.preventDefault();
+        const store = useUiStore.getState();
+        store.setSidebarCollapsed(!store.sidebarCollapsed);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        applyHistory(event.shiftKey ? "redo" : "undo");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [engine]);
+
+  const exportBlueprint = async () => {
+    try {
+      await navigator.clipboard.writeText(blueprintText);
+      addActivity({
+        actor: "you",
+        name: "export",
+        success: true,
+        revision: summary.revision,
+        payload: JSON.stringify({ bytes: blueprintText.length }),
+      });
+    } catch (error) {
+      addActivity({
+        actor: "you",
+        name: "export",
+        success: false,
+        revision: summary.revision,
+        payload: JSON.stringify({ error: error instanceof Error ? error.message : "Clipboard unavailable" }),
+      });
+    }
+  };
+
+  const validateAndApplyJson = () => {
+    const parsed = parseBuildJson(jsonDraft);
+    if (!parsed.ok) {
+      setJsonError(parsed.error);
+      addActivity({
+        actor: "you",
+        name: "json.validate",
+        success: false,
+        revision: summary.revision,
+        payload: JSON.stringify({ error: parsed.error }),
+      });
+      return;
+    }
+    setJsonError(null);
+    const edits = snapshotEdits(currentBlocks, parsed.blocks);
+    const result = engine.apply({
+      type: "set_blocks",
+      expectedRevision: engine.getContext().revision,
+      edits,
+    });
+    handleResult(result, "json.apply", JSON.stringify({ edits: edits.length }));
+    if (result.success) useUiStore.getState().setJsonMode(false);
+  };
+
+  const toggleSidebar = () => {
+    const store = useUiStore.getState();
+    store.setSidebarCollapsed(!store.sidebarCollapsed);
+  };
 
   return (
     <div className="arena-app-shell">
       <a className="skip-link" href="#arena-workspace">Skip to Build Arena</a>
+      <h1 className="sr-only">Build Arena</h1>
 
       <header className="arena-topbar">
-        <div className="brand-lockup">
-          <p className="eyebrow">Minecraft-inspired voxel workspace</p>
-          <h1>Build Arena</h1>
-        </div>
         <nav className="product-tabs" aria-label="Workspace">
+          <button disabled title="Game tab comes after the arena" type="button">Minecraft</button>
           <button aria-current="page" type="button">Build Arena</button>
-          <button disabled type="button">Game <span>Later</span></button>
         </nav>
         <div className="topbar-actions">
-          <p className="revision-badge" role="status">Revision {summary.revision}</p>
-          <button disabled title="Blueprint export arrives in Phase 4" type="button">Export later</button>
+          <button className="export-button" onClick={() => void exportBlueprint()} type="button">Export</button>
+          <button aria-label="Undo" className="icon-button" data-flip="true" onClick={() => applyHistory("undo")} title="Undo" type="button">
+            <RedoIcon />
+          </button>
+          <button aria-label="Redo" className="icon-button" onClick={() => applyHistory("redo")} title="Redo" type="button">
+            <RedoIcon />
+          </button>
           <button
             aria-controls="arena-editor-sidebar"
             aria-expanded={!sidebarCollapsed}
+            aria-keyshortcuts="]"
             aria-label={sidebarCollapsed ? "Expand editor sidebar" : "Collapse editor sidebar"}
-            className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="icon-button sidebar-toggle"
+            onClick={toggleSidebar}
             title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
             type="button"
           >
@@ -169,13 +324,8 @@ export function BuildArenaPage() {
             ))}
           </div>
           <div className="renderer-host" ref={rendererHost} />
-          <div className="viewport-status">
-            <span>Protected platform: 7×7</span>
-            <strong>
-              {selectedCoordinate
-                ? `(${selectedCoordinate.x}, ${selectedCoordinate.y}, ${selectedCoordinate.z})`
-                : "No coordinate selected"}
-            </strong>
+          <div className="viewport-status" role="status" aria-live="polite">
+            <strong>{statusMessage}</strong>
           </div>
           <BlockPalette selectedBlock={selectedBlock} onSelect={setSelectedBlock} />
         </section>
@@ -186,15 +336,29 @@ export function BuildArenaPage() {
           hidden={sidebarCollapsed}
           id="arena-editor-sidebar"
         >
-          <div className="sidebar-header">
-            <div>
-              <p className="panel-kicker">Editor tools</p>
-              <h2>Build controls</h2>
-            </div>
-          </div>
-
-          {!sidebarCollapsed && (
-            <>
+          {jsonMode ? (
+            <section className="json-editor" aria-labelledby="json-editor-title">
+              <div className="json-editor-toolbar">
+                <div>
+                  <p className="panel-kicker">Blueprint</p>
+                  <h2 id="json-editor-title">JSON editor</h2>
+                </div>
+                <div className="json-editor-actions">
+                  <button onClick={validateAndApplyJson} type="button">Validate and apply</button>
+                  <button className="text-button" onClick={() => setJsonMode(false)} type="button">Back</button>
+                </div>
+              </div>
+              <p className="control-hint">Invalid JSON never applies. Valid apply uses the current revision.</p>
+              {jsonError && <p className="json-error" role="alert">{jsonError}</p>}
+              <textarea
+                aria-label="Blueprint JSON"
+                onChange={(event) => setJsonDraft(event.target.value)}
+                spellCheck={false}
+                value={jsonDraft}
+              />
+            </section>
+          ) : (
+            <div className="sidebar-shell">
               <nav className="sidebar-tabs" aria-label="Editor panels">
                 {SIDEBAR_PANELS.map((panel) => (
                   <button
@@ -209,64 +373,122 @@ export function BuildArenaPage() {
               </nav>
 
               <div className="sidebar-panel">
-                {activeSidebarPanel === "controls" && (
-                  <>
-                    <CoordinateInspector
-                      coordinate={selectedCoordinate}
-                      onChange={setSelectedCoordinate}
-                      onSelectCentre={() => setSelectedCoordinate({ x: 0, y: 1, z: 0 })}
-                    />
-                    <ArenaControls
-                      disabled={!selectedCoordinate}
-                      onPlace={() => applyEdit("place")}
-                      onRemove={() => applyEdit("remove")}
-                      onReplace={() => applyEdit("replace")}
-                    />
-                    <HistoryControls
-                      onRedo={() => applyHistory("redo")}
-                      onUndo={() => applyHistory("undo")}
-                    />
-                    <ValidationPanel notice={notice} />
-                  </>
-                )}
-
                 {activeSidebarPanel === "layers" && (
-                  <section aria-labelledby="summary-title">
-                    <p className="panel-kicker">Live engine read</p>
-                    <h3 id="summary-title">Build summary</h3>
-                    <p className="summary-total">{summary.blockCount} placed blocks</p>
-                    <ul className="material-counts">
-                      {PHASE_A_BLOCK_IDS.map((blockId) => (
-                        <li key={blockId}><span>{blockId.replaceAll("_", " ")}</span><strong>{summary.counts[blockId]}</strong></li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-
-                {activeSidebarPanel === "json" && (
-                  <section aria-labelledby="json-title">
-                    <p className="panel-kicker">Read-only preview</p>
-                    <h3 id="json-title">Current build JSON</h3>
-                    <p className="control-hint">Versioned blueprint import/export arrives in Phase 4.</p>
-                    <pre className="json-preview">{JSON.stringify({ revision: summary.revision, blocks: currentBlocks }, null, 2)}</pre>
+                  <section aria-labelledby="layers-title">
+                    <h3 id="layers-title">Layers</h3>
+                    <p className="empty-state">No layers yet</p>
                   </section>
                 )}
 
                 {activeSidebarPanel === "activity" && (
-                  <section aria-labelledby="activity-title">
-                    <p className="panel-kicker">Engine events</p>
-                    <h3 id="activity-title">Activity</h3>
-                    <ol className="activity-list">
-                      {activity.map((entry) => <li key={entry.id}>{entry.message}</li>)}
-                    </ol>
+                  <div className="split-stack" aria-label="Activity and JSON">
+                    <ActivityList activity={activity} titleId="activity-feed-title" title="Agent activity" />
+                    <JsonPane
+                      text={blueprintText}
+                      titleId="activity-json-title"
+                      onEdit={() => {
+                        setJsonDraft(blueprintText);
+                        setJsonMode(true);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {activeSidebarPanel === "slider" && (
+                  <section aria-labelledby="slider-title">
+                    <h3 id="slider-title">Platform size</h3>
+                
+                    <OddSlider
+                      label="All axis"
+                      onChange={setPlatformSize}
+                      value={platformSize}
+                    />
                   </section>
                 )}
               </div>
-            </>
+            </div>
           )}
         </aside>
       </main>
     </div>
+  );
+}
+
+function ActivityList({
+  activity,
+  title,
+  titleId,
+}: {
+  activity: readonly ActivityEntry[];
+  title: string;
+  titleId: string;
+}) {
+  return (
+    <section className="activity-pane" aria-labelledby={titleId}>
+      <h3 id={titleId}>{title}</h3>
+      <ol className="activity-list">
+        {activity.map((entry) => (
+          <li data-failed={entry.success ? undefined : "true"} key={`${titleId}-${entry.id}`}>
+            <div className="activity-meta">
+              <time>{entry.time}</time>
+              <span>{entry.actor}</span>
+              <strong>{entry.name}</strong>
+              <span data-ok={entry.success}>{entry.success ? "ok" : "fail"}</span>
+              <span>r{entry.revision}</span>
+            </div>
+            <details>
+              <summary>JSON payload</summary>
+              <pre>{entry.payload}</pre>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function JsonPane({
+  text,
+  onEdit,
+  titleId,
+}: {
+  text: string;
+  onEdit: () => void;
+  titleId: string;
+}) {
+  return (
+    <section className="json-pane" aria-labelledby={titleId}>
+      <div className="section-heading-row">
+        <h3 id={titleId}>JSON</h3>
+        <button className="text-button" onClick={onEdit} type="button">Edit</button>
+      </div>
+      <pre className="json-preview">{text}</pre>
+    </section>
+  );
+}
+
+function OddSlider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="odd-slider">
+      <span>{label}</span>
+      <input
+        max={15}
+        min={3}
+        onChange={(event) => onChange(Number(event.target.value))}
+        step={2}
+        type="range"
+        value={value}
+      />
+      <strong>{value} × {value} × {value}</strong>
+    </label>
   );
 }
 
@@ -279,10 +501,100 @@ function SidebarToggleIcon() {
   );
 }
 
+function RedoIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <polygon
+        fill="currentColor"
+        points="20,6 20,5 19,5 19,4 18,4 18,3 8,3 8,4 7,4 7,5 6,5 6,6 5,6 5,5 5,4 3,4 3,10 9,10 9,8 7,8 7,7 8,7 8,6 9,6 9,5 16,5 16,6 17,6 17,7 18,7 18,8 19,8 19,16 18,16 18,17 17,17 17,18 16,18 16,19 9,19 9,18 8,18 8,17 7,17 7,16 6,16 6,15 4,15 4,18 5,18 5,19 6,19 6,20 7,20 7,21 18,21 18,20 19,20 19,19 20,19 20,18 21,18 21,6"
+      />
+    </svg>
+  );
+}
+
 function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
-function formatCommand(value: string): string {
-  return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+function clock(): string {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(target.closest("input, textarea, select, [contenteditable=true]"));
+}
+
+function formatCoord(coordinate: Coordinate): string {
+  return `(${coordinate.x}, ${coordinate.y}, ${coordinate.z})`;
+}
+
+function blockAt(engine: ArenaEngine, coordinate: Coordinate) {
+  return engine.queryBlocks({
+    region: { min: coordinate, max: coordinate },
+    limit: 1,
+  }).blocks[0]?.block ?? null;
+}
+
+function parseBuildJson(text: string): { ok: true; blocks: Block[] } | { ok: false; error: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "JSON is invalid" };
+  }
+  if (typeof parsed !== "object" || parsed === null || !("blocks" in parsed) || !Array.isArray(parsed.blocks)) {
+    return { ok: false, error: "JSON must include a blocks array" };
+  }
+
+  const blocks: Block[] = [];
+  for (const [index, item] of parsed.blocks.entries()) {
+    if (typeof item !== "object" || item === null) {
+      return { ok: false, error: `blocks[${index}] must be an object` };
+    }
+    const position = "position" in item ? item.position : null;
+    const block = "block" in item ? item.block : null;
+    if (
+      typeof position !== "object" ||
+      position === null ||
+      !("x" in position) ||
+      !("y" in position) ||
+      !("z" in position) ||
+      ![position.x, position.y, position.z].every((value) => typeof value === "number")
+    ) {
+      return { ok: false, error: `blocks[${index}].position must be { x, y, z }` };
+    }
+    if (!isBlockId(block)) {
+      return { ok: false, error: `blocks[${index}].block is not a Phase A id` };
+    }
+    blocks.push({
+      position: { x: position.x, y: position.y, z: position.z },
+      block,
+    });
+  }
+  return { ok: true, blocks };
+}
+
+function snapshotEdits(current: readonly Block[], next: readonly Block[]): BlockEdit[] {
+  const currentByKey = new Map(current.map((item) => [coordinateKey(item.position), item.block]));
+  const nextKeys = new Set<string>();
+  const edits: BlockEdit[] = [];
+
+  for (const item of next) {
+    const key = coordinateKey(item.position);
+    nextKeys.add(key);
+    const existing = currentByKey.get(key);
+    if (existing === undefined) {
+      edits.push({ action: "place", position: item.position, block: item.block });
+    } else if (existing !== item.block) {
+      edits.push({ action: "replace", position: item.position, block: item.block });
+    }
+  }
+
+  for (const item of current) {
+    if (!nextKeys.has(coordinateKey(item.position))) {
+      edits.push({ action: "remove", position: item.position });
+    }
+  }
+
+  return edits;
 }

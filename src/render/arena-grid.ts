@@ -21,8 +21,10 @@ export function createArenaGrid(): ArenaGrid {
   group.name = "protected-arena-platform";
 
   const geometry = new BoxGeometry(0.98, 0.98, 0.98);
-  const material = new MeshStandardMaterial({ color: 0x33434d, roughness: 0.9, metalness: 0 });
-  const platform = new InstancedMesh(geometry, material, 49);
+  const grassTop = new MeshStandardMaterial({ color: 0x5d9c46, roughness: 0.94, metalness: 0 });
+  const dirt = new MeshStandardMaterial({ color: 0x866043, roughness: 0.96, metalness: 0 });
+  const materials = [dirt, dirt, grassTop, dirt, dirt, dirt];
+  const platform = new InstancedMesh(geometry, materials, 49);
   const coordinates: Coordinate[] = [];
   const matrix = new Matrix4();
 
@@ -39,7 +41,7 @@ export function createArenaGrid(): ArenaGrid {
   platform.computeBoundingSphere();
   group.add(platform);
 
-  const grid = new GridHelper(7, 7, 0x6aa9d8, 0x50616d);
+  const grid = new GridHelper(7, 7, 0xd7e8a0, 0x3d6b32);
   grid.position.y = 0.5;
   group.add(grid);
 
@@ -51,7 +53,8 @@ export function createArenaGrid(): ArenaGrid {
     },
     dispose() {
       geometry.dispose();
-      material.dispose();
+      grassTop.dispose();
+      dirt.dispose();
       const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
       for (const gridMaterial of gridMaterials) gridMaterial.dispose();
       grid.geometry.dispose();
