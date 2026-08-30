@@ -1,4 +1,4 @@
-// textures.js — Block materials: load assets/*.png hand-drawn pixel textures + procedural redstone dust connections
+// textures.js — Block materials: load ../<name>.png from assets /assets hand-drawn pixel textures + procedural redstone dust connections
 import * as THREE from '../vendor/three.module.js';
 
 const S = 16;
@@ -12,7 +12,7 @@ const px = (ctx,x,y,c)=>{ ctx.fillStyle=c; ctx.fillRect(x,y,1,1); };
 // Load PNG textures (NearestFilter keeps pixel look), with cache
 function loadTex(name) {
   if (texCache.has(name)) return texCache.get(name);
-  const t = loader.load(`assets/${name}.png`);
+  const t = loader.load(`../${name}.png`);
   t.magFilter = t.minFilter = THREE.NearestFilter;
   t.colorSpace = THREE.SRGBColorSpace;
   texCache.set(name, t);
@@ -80,7 +80,7 @@ export function iconCanvas(id) {
   if (ICON_PNG[id]) {                                   // use PNG texture as icon
     const img = new Image();
     img.onload = () => { o.imageSmoothingEnabled=false; o.drawImage(img,0,0,32,32); };
-    img.src = `assets/${ICON_PNG[id]}.png`;
+    img.src = `../${ICON_PNG[id]}.png`;
     return out;
   }
   // redstone components (dust/torch/lever/button) use simple pixel sketch

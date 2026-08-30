@@ -4,7 +4,7 @@ import os, random
 from PIL import Image
 
 S = 16
-OUT = os.path.join(os.path.dirname(__file__), '..', 'assets')
+OUT = os.path.join(os.path.dirname(__file__), '..', '..')  # assets /assets (parent of this clone)
 os.makedirs(OUT, exist_ok=True)
 
 def img(): return Image.new('RGBA', (S, S), (0, 0, 0, 0))
