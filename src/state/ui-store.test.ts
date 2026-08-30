@@ -1,0 +1,93 @@
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { DEFAULT_UI_STATE, useUiStore, type UiState, type UiStore } from "./ui-store";
+
+function pickUiState(store: UiStore): UiState {
+  return {
+    selectedBlock: store.selectedBlock,
+    selectedCoordinate: store.selectedCoordinate,
+    cameraPreset: store.cameraPreset,
+    sidebarCollapsed: store.sidebarCollapsed,
+    activeSidebarPanel: store.activeSidebarPanel,
+  };
+}
+
+describe("useUiStore", () => {
+  beforeEach(() => {
+    useUiStore.getState().resetUiState();
+  });
+
+  it("starts with the documented UI defaults", () => {
+    expect(pickUiState(useUiStore.getState())).toEqual({
+      selectedBlock: "stone",
+      selectedCoordinate: null,
+      cameraPreset: "iso",
+      sidebarCollapsed: true,
+      activeSidebarPanel: "controls",
+    });
+    expect(pickUiState(useUiStore.getState())).toEqual(DEFAULT_UI_STATE);
+  });
+
+  it("updates each field through a named action", () => {
+    const { getState } = useUiStore;
+    const coordinate = Object.freeze({ x: -1, y: 2, z: 3 });
+
+    getState().setSelectedBlock("oak_planks");
+    getState().setSelectedCoordinate(coordinate);
+    getState().setCameraPreset("top");
+    getState().setSidebarCollapsed(false);
+    getState().setActiveSidebarPanel("layers");
+
+    expect(pickUiState(getState())).toEqual({
+      selectedBlock: "oak_planks",
+      selectedCoordinate: { x: -1, y: 2, z: 3 },
+      cameraPreset: "top",
+      sidebarCollapsed: false,
+      activeSidebarPanel: "layers",
+    });
+  });
+
+  it("restores defaults with resetUiState", () => {
+    const { getState } = useUiStore;
+
+    getState().setSelectedBlock("glass");
+    getState().setSelectedCoordinate({ x: 0, y: 1, z: 0 });
+    getState().setCameraPreset("right");
+    getState().setSidebarCollapsed(false);
+    getState().setActiveSidebarPanel("activity");
+    getState().resetUiState();
+
+    expect(pickUiState(getState())).toEqual(DEFAULT_UI_STATE);
+  });
+
+  it("keeps previous snapshots unchanged after an action", () => {
+    const before = useUiStore.getState();
+
+    before.setSelectedBlock("dirt");
+    before.setCameraPreset("front");
+
+    const after = useUiStore.getState();
+
+    expect(after).not.toBe(before);
+    expect(before.selectedBlock).toBe("stone");
+    expect(before.cameraPreset).toBe("iso");
+    expect(after.selectedBlock).toBe("dirt");
+    expect(after.cameraPreset).toBe("front");
+  });
+
+  it("stores a copied coordinate so the input can be mutated later", () => {
+    const input = { x: 1, y: 4, z: -2 };
+
+    useUiStore.getState().setSelectedCoordinate(input);
+    input.x = 99;
+    input.y = 0;
+
+    const stored = useUiStore.getState().selectedCoordinate;
+    expect(stored).toEqual({ x: 1, y: 4, z: -2 });
+    expect(stored).not.toBe(input);
+    expect(Object.isFrozen(stored)).toBe(true);
+
+    useUiStore.getState().setSelectedCoordinate(null);
+    expect(useUiStore.getState().selectedCoordinate).toBeNull();
+  });
+});
