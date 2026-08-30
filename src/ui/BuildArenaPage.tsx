@@ -15,6 +15,7 @@ import {
   serializeBlueprintJson,
 } from "../storage/blueprint-json";
 import { BlockPalette } from "./BlockPalette";
+import { SpaceLoadOverlay } from "./SpaceLoadOverlay";
 
 type ActivityActor = "you" | "agent";
 
@@ -50,6 +51,7 @@ export function BuildArenaPage() {
   const [jsonDraft, setJsonDraft] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("Click place \ndouble-click select\nRight-click remove");
+  const [spaceReady, setSpaceReady] = useState(false);
   const nextActivityId = useRef(1);
   const rendererHost = useRef<HTMLDivElement>(null);
   const rendererInstance = useRef<ArenaRenderer | null>(null);
@@ -151,6 +153,7 @@ export function BuildArenaPage() {
       onPlace: (coordinate) => placeCell(coordinate),
       onRemove: (coordinate) => removeCell(coordinate),
       onSelect: (coordinate) => inspectCell(coordinate),
+      onFirstFrame: () => setSpaceReady(true),
     });
     rendererInstance.current = arenaRenderer;
     arenaRenderer.setCameraPreset(useUiStore.getState().cameraPreset);
@@ -325,6 +328,7 @@ export function BuildArenaPage() {
 
   return (
     <div className="arena-app-shell">
+      <SpaceLoadOverlay spaceReady={spaceReady} />
       <a className="skip-link" href="#arena-workspace">Skip to Build Arena</a>
       <h1 className="sr-only">Build Arena</h1>
 

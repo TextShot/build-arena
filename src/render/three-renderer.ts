@@ -33,6 +33,9 @@ export type ArenaRendererOptions = Readonly<{
   onPlace: (coordinate: Coordinate) => void;
   onRemove: (coordinate: Coordinate) => void;
   onSelect: (coordinate: Coordinate) => void;
+
+  /** Fires once after the first painted frame. */
+  onFirstFrame?: () => void;
 }>;
 
 type CellHit = Readonly<{
@@ -68,6 +71,7 @@ export class ArenaRenderer {
   private animationActive = false;
   private lastLeftClick: LastLeftClick | null = null;
   private cameraPreset: CameraPreset = "iso";
+  private firstFrameNotified = false;
 
   constructor(
     private readonly container: HTMLElement,
@@ -245,6 +249,10 @@ export class ArenaRenderer {
     if (this.needsRender || controlsChanged) {
       this.needsRender = false;
       this.renderer.render(this.scene, this.camera);
+      if (!this.firstFrameNotified) {
+        this.firstFrameNotified = true;
+        this.options.onFirstFrame?.();
+      }
     }
     if (!this.needsRender && !controlsChanged) {
       this.renderer.setAnimationLoop(null);
