@@ -128,6 +128,11 @@ export function iconCanvas(id) {
   else if (id==='redstone_torch'){ ctx.fillStyle='#6b4a25'; ctx.fillRect(7,7,2,8); ctx.fillStyle='#ff3b3b'; ctx.fillRect(6,2,4,4); }
   else if (id==='lever'){ ctx.fillStyle='#8a8a8a'; ctx.fillRect(2,9,12,5); ctx.fillStyle='#9a6a3a'; ctx.fillRect(7,2,2,9); }
   else if (id==='button'){ ctx.fillStyle='#808080'; ctx.fillRect(0,0,S,S); ctx.fillStyle='#777'; ctx.fillRect(4,6,8,4); }
+  else if (id==='oak_sign'){
+    ctx.fillStyle='#b08046'; ctx.fillRect(1,2,14,8);
+    ctx.fillStyle='#6b4425'; ctx.fillRect(7,10,2,6);
+    ctx.fillStyle='#2a1a0d'; ctx.fillRect(4,5,8,1);
+  }
   o.drawImage(c, 0, 0, 32, 32);
   return out;
 }

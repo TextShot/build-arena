@@ -7,6 +7,7 @@ import {
   spaceLoadPercent,
   spaceLoadShouldDismiss,
 } from "./space-load";
+import { startThemeMusic } from "./theme-music";
 
 const FADE_AFTER_COMPLETE_MS = 280;
 const UNMOUNT_AFTER_FADE_MS = 400;
@@ -43,13 +44,7 @@ export function SpaceLoadOverlay({ spaceReady }: SpaceLoadOverlayProps) {
 
   useEffect(() => {
     if (!shouldDismiss) return;
-    const audio = document.querySelector("#theme-music");
-    if (!(audio instanceof HTMLAudioElement)) return;
-    audio.volume = 0.4;
-    const kick = () => { void audio.play(); };
-    void audio.play().catch(() => {
-      window.addEventListener("pointerdown", kick, { once: true });
-    });
+    startThemeMusic();
   }, [shouldDismiss]);
 
   useEffect(() => {

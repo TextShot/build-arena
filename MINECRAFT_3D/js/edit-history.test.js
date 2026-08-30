@@ -102,6 +102,18 @@ describe("EditHistory", () => {
     expect(readState(position)).toBeNull();
   });
 
+  it("keeps edited Sign text when its placement is undone and redone", () => {
+    const { blocks, history, readState, applyState } = createHarness();
+    const position = [0, 0, 0];
+    applyState(position, { id: "oak_sign", facing: "N", text: "" });
+    history.record(position, null, { id: "oak_sign", facing: "N", text: "" });
+    blocks.set("0,0,0", { id: "oak_sign", facing: "N", text: "Hello" });
+
+    history.undo();
+    history.redo();
+    expect(readState(position)).toEqual({ id: "oak_sign", facing: "N", text: "Hello" });
+  });
+
   it("detects an external rewrite even when the block state looks identical", () => {
     const { history, readState, applyState } = createHarness();
     const position = [0, 0, 0];

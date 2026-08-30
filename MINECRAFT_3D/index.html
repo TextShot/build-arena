@@ -11,7 +11,7 @@
 </head>
 <body>
   <canvas id="game"></canvas>
-  <audio id="theme-music" loop preload="auto" src="/Going%20Up.ogg"></audio>
+  <audio id="theme-music" muted preload="auto" src="/Going%20Up.ogg"></audio>
 
   <div class="space-load-overlay" id="space-load">
     <div class="space-load-stack">
@@ -45,9 +45,11 @@
       Move: <b>WASD</b> &nbsp; | &nbsp; <b>Space</b> Up &nbsp; | &nbsp; <b>Shift</b> Down<br>
       Place: <b>Left Click</b> &nbsp; | &nbsp; Break: <b>Right Click</b><br>
       Select Block: <b>Scroll</b> / <b>0–9</b><br>
+      Select Sign Board: <b>B</b><br>
       Inventory: <b>E</b> or <b>⋯</b> &nbsp; | &nbsp; <b>Esc</b> Pause/Cancel<br>
       Undo: <b>Ctrl/Cmd+Z</b> &nbsp; | &nbsp; Redo: <b>Ctrl/Cmd+Shift+Z</b><br>
       Build Lock: <b>L</b> (levers and buttons stay usable)<br>
+      Music: <b>M (mute/unmute)</b><br>
       Look: <b>← ↑ ↓ → using keyboard arrows</b>
     </small>
     <br>
@@ -67,6 +69,16 @@
       <p class="empty-state">No saved builds</p>
       <ul class="inventory-list"></ul>
     </div>
+  </div>
+
+  <div hidden id="sign-editor-overlay">
+    <form aria-label="Edit Sign Message" class="sign-editor-dialog" id="sign-editor-form">
+      <h2>Edit Sign Message</h2>
+      <div class="sign-editor-board">
+        <textarea aria-label="Sign message" id="sign-editor-text" rows="4" spellcheck="false"></textarea>
+      </div>
+      <button type="submit">Done</button>
+    </form>
   </div>
 
   <script type="module" src="js/main.js"></script>

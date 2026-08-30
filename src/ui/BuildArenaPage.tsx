@@ -5,6 +5,7 @@ import importIcon from "../assets/svg/import.svg";
 import inventoryIcon from "../assets/svg/inventory.svg";
 import questionMarkIcon from "../assets/svg/question-mark.svg";
 import clearIcon from "../assets/svg/clear.svg";
+import soundIcon from "../assets/svg/sound.svg";
 import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
 import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
 import { createBlueprint } from "../core/blueprint";
@@ -31,6 +32,7 @@ import {
 import { BlockPalette } from "./BlockPalette";
 import { InventoryOverlay } from "./InventoryOverlay";
 import { SpaceLoadOverlay } from "./SpaceLoadOverlay";
+import { isThemeMusicMuted, toggleThemeMusic } from "./theme-music";
 
 type ActivityActor = "you" | "agent";
 
@@ -69,6 +71,7 @@ export function BuildArenaPage() {
   const [spaceReady, setSpaceReady] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [controlsHelpOpen, setControlsHelpOpen] = useState(false);
+  const [musicMuted, setMusicMuted] = useState(() => isThemeMusicMuted());
   const [inventoryEntries, setInventoryEntries] = useState(() => readInventory().entries);
   const nextActivityId = useRef(1);
   const importInput = useRef<HTMLInputElement>(null);
@@ -480,6 +483,17 @@ export function BuildArenaPage() {
           </button>
           <button aria-label="Add to inventory" className="icon-button" data-tooltip="Inventory" onClick={saveToInventory} type="button">
             <img alt="" src={inventoryIcon} />
+          </button>
+          <button
+            aria-label={musicMuted ? "Music muted. Unmute" : "Music playing. Mute"}
+            aria-pressed={!musicMuted}
+            className="icon-button music-toggle"
+            data-muted={musicMuted ? "true" : "false"}
+            data-tooltip={musicMuted ? "Unmute" : "Mute"}
+            onClick={() => setMusicMuted(toggleThemeMusic())}
+            type="button"
+          >
+            <img alt="" src={soundIcon} />
           </button>
           <button
             aria-controls="build-controls-help"

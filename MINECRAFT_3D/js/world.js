@@ -4,6 +4,7 @@ import { PointerLockControls } from '../vendor/PointerLockControls.js';
 import { BLOCKS, simulate } from './blocks.js';
 import { applyLookDelta, lookDeltaFromKeys } from './look.js';
 import { faceMaterials, dustMaterial } from './textures.js';
+import { fitSignText } from './sign-text.js';
 
 const key = (x, y, z) => `${x},${y},${z}`;
 const DIRS = [['E',1,0],['W',-1,0],['N',0,-1],['S',0,1]];   // redstone dust four-way connections
@@ -57,15 +58,19 @@ export class World {
     this.fallbackActive = false;
     this.fallbackDragging = false;
     this.pendingFallback = null;
+    this.pointerLockRequestPending = false;
     this.controls.addEventListener('lock', () => {
       clearTimeout(this.pendingFallback);
+      this.pointerLockRequestPending = false;
       this.fallbackActive = false;
       this.interaction.dispatchEvent(new Event('lock'));
     });
     this.controls.addEventListener('unlock', () => {
+      this.pointerLockRequestPending = false;
       if (!this.fallbackActive) this.interaction.dispatchEvent(new Event('unlock'));
     });
     document.addEventListener('pointerlockerror', () => {
+      this.pointerLockRequestPending = false;
       this.fallbackAvailable = true;
       this._activateFallback();
     });
@@ -83,8 +88,9 @@ export class World {
       if (event.button === 0) this.fallbackDragging = false;
     });
     this.keys = {};
+    this.inputSuspended = false;
     addEventListener('keydown', e => {
-      if (document.activeElement.tagName === 'TEXTAREA') return;
+      if (this.inputSuspended || document.activeElement.tagName === 'TEXTAREA') return;
       if (e.code.startsWith('Arrow')) e.preventDefault();
       this.keys[e.code] = true;
     });
@@ -101,12 +107,19 @@ export class World {
 
   locked(){ return this.controls.isLocked || this.fallbackActive; }
 
+  setInputSuspended(suspended) {
+    this.inputSuspended = suspended;
+    if (suspended) this.keys = {};
+  }
+
   _markBlockChanged(k) {
     this.blockRevisions.set(k, this.nextBlockRevision++);
   }
 
   _activateFallback() {
     if (this.controls.isLocked || this.fallbackActive) return;
+    clearTimeout(this.pendingFallback);
+    this.pointerLockRequestPending = false;
     this.fallbackActive = true;
     this.interaction.dispatchEvent(new Event('lock'));
   }
@@ -116,9 +129,24 @@ export class World {
       this._activateFallback();
       return;
     }
-    this.controls.lock();
+    if (this.controls.isLocked || this.pointerLockRequestPending) return;
+    this.pointerLockRequestPending = true;
+    try {
+      const request = this.controls.domElement.requestPointerLock();
+      request?.catch?.(() => {
+        this.pointerLockRequestPending = false;
+        this.fallbackAvailable = true;
+        this._activateFallback();
+      });
+    } catch {
+      this.pointerLockRequestPending = false;
+      this.fallbackAvailable = true;
+      this._activateFallback();
+      return;
+    }
     clearTimeout(this.pendingFallback);
     this.pendingFallback = setTimeout(() => {
+      this.pointerLockRequestPending = false;
       if (!this.controls.isLocked) {
         this.fallbackAvailable = true;
         this._activateFallback();
@@ -181,9 +209,57 @@ export class World {
     this.scene.add(g); this.clouds = g;
   }
 
+  facingTowardPlayer() {
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+    if (Math.abs(direction.x) > Math.abs(direction.z)) return direction.x > 0 ? 'W' : 'E';
+    return direction.z > 0 ? 'N' : 'S';
+  }
+
+  _drawSignText(group, text) {
+    const canvas = group.userData.signCanvas;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    ctx.font = '700 24px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const { lines } = fitSignText(text);
+    lines.forEach((line, index) => ctx.fillText(line, canvas.width / 2, 23 + index * 27));
+    group.userData.signTexture.needsUpdate = true;
+  }
+
+  _buildSign(text) {
+    const group = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0xb08046, roughness: 0.9 });
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.54, 0.94), wood);
+    board.position.y = 0.18;
+    group.add(board);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.58, 0.12), wood);
+    post.position.y = -0.37;
+    group.add(post);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 128;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = texture.magFilter = THREE.NearestFilter;
+    const writing = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.84, 0.42),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+    );
+    writing.position.set(0.085, 0.18, 0);
+    writing.rotation.y = Math.PI / 2;
+    group.add(writing);
+    group.userData.signCanvas = canvas;
+    group.userData.signTexture = texture;
+    this._drawSignText(group, text);
+    return group;
+  }
+
   // build geometry by block type (redstone components have dedicated models)
-  _build(id) {
+  _build(id, data) {
     const def = BLOCKS[id];
+    if (def.sign) return this._buildSign(data.text);
     if (def.wire) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.98,0.06,0.98), dustMaterial('NSEW'));
       m.userData.dust = true; return m;
@@ -239,9 +315,13 @@ export class World {
       data.facing = FACE_OK(opts.facing) ? opts.facing : 'E';
       if (def.comparator) data.mode = opts.mode==='subtract' ? 'subtract' : 'compare';
     }
+    if (def.sign) {
+      data.facing = FACE_OK(opts.facing) ? opts.facing : 'N';
+      data.text = fitSignText(opts.text).text;
+    }
     this.blocks.set(k, data);
     this._markBlockChanged(k);
-    const mesh = this._build(id);
+    const mesh = this._build(id, data);
     const yo = def.wire ? y-0.47 : (def.repeater||def.comparator) ? y-0.42 : (id==='button'? y-0.44 : y);
     mesh.position.set(x, yo, z);
     if (data.facing) mesh.rotation.y = FACE_ANGLE[data.facing];
@@ -287,6 +367,15 @@ export class World {
     this.refresh();
   }
 
+  setSignText(x, y, z, text) {
+    const b = this.blocks.get(key(x,y,z));
+    if (!b || !BLOCKS[b.id].sign) return false;
+    b.text = fitSignText(text).text;
+    const mesh = this.meshes.get(key(x,y,z));
+    if (mesh) this._drawSignText(mesh, b.text);
+    return true;
+  }
+
   setPoweredLamps(keys) {
     this.displayLampKeys = new Set(keys);
     this.refresh();
@@ -294,7 +383,22 @@ export class World {
 
   _removeMesh(k) {
     const m = this.meshes.get(k);
-    if (m){ this.scene.remove(m); this.meshes.delete(k); }
+    if (m){
+      this.scene.remove(m);
+      if (m.userData.signTexture) {
+        const geometries = new Set();
+        const materials = new Set();
+        m.traverse((part) => {
+          if (part.geometry) geometries.add(part.geometry);
+          if (Array.isArray(part.material)) part.material.forEach((material) => materials.add(material));
+          else if (part.material) materials.add(part.material);
+        });
+        geometries.forEach((geometry) => geometry.dispose());
+        materials.forEach((material) => material.dispose());
+        m.userData.signTexture.dispose();
+      }
+      this.meshes.delete(k);
+    }
   }
 
   clear(){ for (const k of [...this.blocks.keys()]){ this.blocks.delete(k); this._markBlockChanged(k); this._removeMesh(k);} this.refresh(); }

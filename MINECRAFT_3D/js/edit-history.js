@@ -22,7 +22,7 @@ function statesEqual(left, right) {
   if (left === null || right === null) return left === right;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
-    if (key === "on") continue;
+    if (key === "on" || key === "text") continue;
     if (left[key] !== right[key]) return false;
   }
   return true;
@@ -84,11 +84,13 @@ export class EditHistory {
     const entry = source.at(-1);
     if (!entry) return { status: "empty" };
     const expectedRevision = entry[`${expectedKey}Revision`];
-    if (!statesEqual(this.readState(entry.position), entry[expectedKey])
+    const currentState = this.readState(entry.position);
+    if (!statesEqual(currentState, entry[expectedKey])
       || (expectedRevision !== null && this.readRevision(entry.position) !== expectedRevision)) {
       this.clear();
       return { status: "conflict" };
     }
+    entry[expectedKey] = cloneState(currentState);
     source.pop();
     this.applyState(entry.position, cloneState(entry[nextKey]));
     const appliedRevision = this.readRevision(entry.position);

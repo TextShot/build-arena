@@ -25,6 +25,7 @@ export const BLOCKS = {
   oak_fence:      { name: 'Oak fence',      color: 0xb08046, solid: false },
   stone_wall:     { name: 'Stone wall',     color: 0x7d858b, solid: false },
   oak_trapdoor:   { name: 'Oak trapdoor',   color: 0xb08046, solid: false },
+  oak_sign:       { name: 'Oak Sign',       color: 0xb08046, solid: false, sign: true },
 };
 
 export const HOTBAR_IDS = Object.freeze([
@@ -38,6 +39,7 @@ export const HOTBAR_IDS = Object.freeze([
   'comparator',
   'lamp',
   'piston',
+  'oak_sign',
 ]);
 
 /** Number-row 1–9 → slots 0–8; 0 → slot 9 (tenth block). */
@@ -59,7 +61,8 @@ export function heldHotbarLabel(blockId, slot) {
   return digit == null ? name : `${name} (${digit})`;
 }
 
-export const BLOCK_IDS = Object.keys(BLOCKS);
+// Signs are edited through the player-facing modal, so agent plans cannot place them.
+export const BLOCK_IDS = Object.keys(BLOCKS).filter((id) => id !== 'oak_sign');
 
 const key = (x, y, z) => `${x},${y},${z}`;
 const NEIGH = [[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,1,0],[0,-1,0]];
