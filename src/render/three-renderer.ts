@@ -15,6 +15,7 @@ import {
 } from "three";
 
 import type { ArenaEngine } from "../core/arena-engine";
+import { platformSizeForConfig } from "../core/arena-config";
 import type { Coordinate } from "../core/coordinates";
 import type { CameraPreset } from "../state/ui-store";
 import { createArenaGrid } from "./arena-grid";
@@ -52,9 +53,9 @@ const _instanceMatrix = new Matrix4();
 export class ArenaRenderer {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
-  private readonly camera = new PerspectiveCamera(46, 1, 0.1, 80);
+  private readonly camera = new PerspectiveCamera(46, 1, 0.1, 500);
   private readonly controls: ReturnType<typeof createCameraControls>;
-  private readonly grid = createArenaGrid();
+  private grid: ReturnType<typeof createArenaGrid>;
   private readonly sky = createArenaSkyTexture();
   private readonly blocks = new BlockMeshRegistry();
   private readonly highlight = new SelectionHighlight();
@@ -66,12 +67,14 @@ export class ArenaRenderer {
   private needsRender = true;
   private animationActive = false;
   private lastLeftClick: LastLeftClick | null = null;
+  private cameraPreset: CameraPreset = "iso";
 
   constructor(
     private readonly container: HTMLElement,
     private readonly engine: ArenaEngine,
     private readonly options: ArenaRendererOptions,
   ) {
+    this.grid = createArenaGrid(this.engine.getContext().bounds);
     this.renderer = new WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
@@ -94,14 +97,22 @@ export class ArenaRenderer {
     this.scene.add(keyLight);
 
     this.controls = createCameraControls(this.camera, this.renderer.domElement, () => this.invalidate());
-    applyCameraPreset(this.camera, this.controls, "iso");
+    applyCameraPreset(
+      this.camera,
+      this.controls,
+      this.cameraPreset,
+      platformSizeForConfig(this.engine.getContext().bounds),
+    );
 
     this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
     this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
     this.renderer.domElement.addEventListener("contextmenu", this.handleContextMenu);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
-    this.unsubscribe = this.engine.subscribe(() => this.refreshBlocks());
+    this.unsubscribe = this.engine.subscribe((change) => {
+      if (change.commandType === "resize_platform") this.refreshPlatform();
+      else this.refreshBlocks();
+    });
 
     this.refreshBlocks();
     this.resize();
@@ -109,7 +120,29 @@ export class ArenaRenderer {
   }
 
   setCameraPreset(preset: CameraPreset): void {
-    applyCameraPreset(this.camera, this.controls, preset);
+    this.cameraPreset = preset;
+    applyCameraPreset(
+      this.camera,
+      this.controls,
+      preset,
+      platformSizeForConfig(this.engine.getContext().bounds),
+    );
+    this.invalidate();
+  }
+
+  refreshPlatform(): void {
+    const previousGrid = this.grid;
+    this.grid = createArenaGrid(this.engine.getContext().bounds);
+    this.scene.remove(previousGrid.group);
+    this.scene.add(this.grid.group);
+    previousGrid.dispose();
+    this.lastLeftClick = null;
+    applyCameraPreset(
+      this.camera,
+      this.controls,
+      this.cameraPreset,
+      platformSizeForConfig(this.engine.getContext().bounds),
+    );
     this.invalidate();
   }
 
@@ -194,7 +227,7 @@ export class ArenaRenderer {
   }
 
   private refreshBlocks(): void {
-    this.blocks.update(this.engine.queryBlocks({ limit: 500 }).blocks);
+    this.blocks.update(this.engine.snapshotBlocks());
     this.invalidate();
   }
 

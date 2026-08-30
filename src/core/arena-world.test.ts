@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { BlockEdit } from "./arena-engine";
 import { createArenaEngine } from "./arena-world";
 
 describe("arena world", () => {
@@ -63,5 +64,57 @@ describe("arena world", () => {
     expect(block).toEqual({ position: { x: 1, y: 2, z: -1 }, block: "glass" });
     expect(Object.isFrozen(block)).toBe(true);
     expect(Object.isFrozen(block.position)).toBe(true);
+  });
+
+  it("resizes to odd platform widths through 101 without visual-only cells", () => {
+    const engine = createArenaEngine();
+    const changes: unknown[] = [];
+    engine.subscribe((change) => changes.push(change));
+
+    expect(engine.resizePlatform(101)).toMatchObject({ success: true, revision: 1 });
+    expect(changes).toEqual([
+      expect.objectContaining({ commandType: "resize_platform", revision: 1, affectedBlocks: 0 }),
+    ]);
+    expect(engine.getContext().bounds).toMatchObject({ minX: -50, maxX: 50, minZ: -50, maxZ: 50 });
+    expect(engine.apply({
+      type: "set_blocks",
+      expectedRevision: 1,
+      edits: [{ action: "place", position: { x: 50, y: 1, z: 50 }, block: "stone" }],
+    })).toMatchObject({ success: true, revision: 2 });
+    expect(engine.apply({
+      type: "set_blocks",
+      expectedRevision: 2,
+      edits: [{ action: "place", position: { x: 51, y: 1, z: 50 }, block: "stone" }],
+    })).toMatchObject({ success: false, revision: 2 });
+  });
+
+  it("rejects invalid or destructive platform shrinking atomically", () => {
+    const engine = createArenaEngine();
+    engine.resizePlatform(9);
+    engine.apply({
+      type: "set_blocks",
+      expectedRevision: 1,
+      edits: [{ action: "place", position: { x: 4, y: 1, z: 0 }, block: "glass" }],
+    });
+
+    expect(engine.resizePlatform(8)).toMatchObject({ success: false, revision: 2 });
+    expect(engine.resizePlatform(7)).toMatchObject({ success: false, revision: 2 });
+    expect(engine.getContext().bounds).toMatchObject({ minX: -4, maxX: 4, minZ: -4, maxZ: 4 });
+    expect(engine.queryBlocks({ limit: 500 }).blocks).toHaveLength(1);
+  });
+
+  it("snapshots every block beyond the public query page limit", () => {
+    const engine = createArenaEngine();
+    engine.resizePlatform(101);
+    const edits: BlockEdit[] = [];
+    for (let z = -2; z <= 2; z += 1) {
+      for (let x = -50; x <= 50; x += 1) {
+        edits.push({ action: "place", position: { x, y: 1, z }, block: "stone" });
+      }
+    }
+    engine.apply({ type: "set_blocks", expectedRevision: 1, edits: edits.slice(0, 256) });
+    engine.apply({ type: "set_blocks", expectedRevision: 2, edits: edits.slice(256) });
+
+    expect(engine.snapshotBlocks()).toHaveLength(505);
   });
 });

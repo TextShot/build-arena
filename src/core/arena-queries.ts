@@ -20,10 +20,10 @@ function inBounds(position: Coordinate, bounds: Bounds): boolean {
     position.z >= bounds.min.z && position.z <= bounds.max.z;
 }
 
-function allBlocks(world: QueryWorld): Block[] {
+export function snapshotBlocks(world: QueryWorld): readonly Block[] {
   const blocks: Block[] = [];
   for (const entry of world.entries()) blocks.push(freezeBlock(entry.position, entry.block));
-  return blocks.sort(sortBlocks);
+  return Object.freeze(blocks.sort(sortBlocks));
 }
 
 export type QueryWorld = Readonly<{
@@ -35,7 +35,7 @@ export function queryBlocks(world: QueryWorld, query: BlockQuery, config: ArenaC
   const queryFailure = validateQuery(query, config);
   if (queryFailure) throw new RangeError(`${queryFailure.fieldPath}: ${queryFailure.error}`);
   const region = query.region;
-  const blocks = allBlocks(world).filter((block) =>
+  const blocks = snapshotBlocks(world).filter((block) =>
     (!region || inBounds(block.position, region)) &&
     (query.layerY === undefined || block.position.y === query.layerY) &&
     (query.blockType === undefined || block.block === query.blockType),
@@ -50,7 +50,7 @@ export function queryBlocks(world: QueryWorld, query: BlockQuery, config: ArenaC
 }
 
 export function getSummary(world: QueryWorld, revision: number): BuildSummary {
-  const blocks = allBlocks(world);
+  const blocks = snapshotBlocks(world);
   const counts = {} as Record<BlockId, number>;
   for (const blockId of PHASE_A_BLOCK_IDS) counts[blockId] = 0;
   for (const block of blocks) counts[block.block] += 1;

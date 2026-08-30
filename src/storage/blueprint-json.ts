@@ -1,6 +1,6 @@
 import Ajv from "ajv";
 
-import { DEFAULT_ARENA_CONFIG } from "../core/arena-config";
+import { DEFAULT_ARENA_CONFIG, type ArenaConfig } from "../core/arena-config";
 import { createBlueprint, type BlueprintV1 } from "../core/blueprint";
 import { PHASE_A_BLOCK_IDS } from "../core/block-types";
 import { coordinateKey } from "../core/coordinates";
@@ -18,7 +18,10 @@ export function serializeBlueprintJson(blueprint: BlueprintV1): string {
   return `${JSON.stringify(blueprint, null, 2)}\n`;
 }
 
-export function parseBlueprintJson(text: string): BlueprintParseResult {
+export function parseBlueprintJson(
+  text: string,
+  arenaConfig: ArenaConfig = DEFAULT_ARENA_CONFIG,
+): BlueprintParseResult {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -40,7 +43,7 @@ export function parseBlueprintJson(text: string): BlueprintParseResult {
     const block = value.blocks[index];
     const positionFailure = validateArenaPosition(
       block.position,
-      DEFAULT_ARENA_CONFIG,
+      arenaConfig,
       `blocks[${index}].position`,
     );
     if (positionFailure) return { success: false, ...positionFailure };

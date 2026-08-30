@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
+import { MAX_PLATFORM_SIZE } from "../core/arena-config";
 import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
@@ -175,7 +176,10 @@ export function BuildArenaPage() {
     [selectedCoordinate],
   );
 
-  const currentBlocks = engine.queryBlocks({ limit: 500 }).blocks;
+  const currentBlocks = useMemo(
+    () => engine.snapshotBlocks(),
+    [engine, summary.revision],
+  );
   const blueprint = createBlueprint(currentBlocks, { id: "arena-build", name: "Arena Build" });
   const blueprintText = serializeBlueprintJson(blueprint);
 
@@ -206,6 +210,19 @@ export function BuildArenaPage() {
   const applyHistory = (type: "undo" | "redo") => {
     const result = engine.apply({ type, expectedRevision: engine.getContext().revision });
     handleResult(result, type, "{}");
+  };
+
+  const resizePlatform = (nextSize: number) => {
+    const result = engine.resizePlatform(nextSize);
+    if (!result.success) {
+      handleResult(result, "platform.resize", JSON.stringify({ size: nextSize }));
+      return;
+    }
+    setPlatformSize(nextSize);
+    const selected = useUiStore.getState().selectedCoordinate;
+    if (selected && !isInsideArena(selected, engine)) {
+      useUiStore.getState().setSelectedCoordinate(null);
+    }
   };
 
   useEffect(() => {
@@ -248,7 +265,7 @@ export function BuildArenaPage() {
   };
 
   const validateAndApplyJson = () => {
-    const parsed = parseBlueprintJson(jsonDraft);
+    const parsed = parseBlueprintJson(jsonDraft, engine.getContext().bounds);
     if (!parsed.success) {
       setJsonError(parsed.error);
       addActivity({
@@ -413,12 +430,9 @@ export function BuildArenaPage() {
                 )}
 
                 {activeSidebarPanel === "slider" && (
-                  <section aria-labelledby="slider-title">
-                    <h3 id="slider-title">Platform size</h3>
-                
+                  <section aria-label="Platform size">
                     <OddSlider
-                      label="All axis"
-                      onChange={setPlatformSize}
+                      onChange={resizePlatform}
                       value={platformSize}
                     />
                   </section>
@@ -486,27 +500,23 @@ function JsonPane({
 }
 
 function OddSlider({
-  label,
   value,
   onChange,
 }: {
-  label: string;
   value: number;
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="odd-slider">
-      <span>{label}</span>
-      <input
-        max={15}
-        min={3}
-        onChange={(event) => onChange(Number(event.target.value))}
-        step={2}
-        type="range"
-        value={value}
-      />
-      <strong>{value} × {value} × {value}</strong>
-    </label>
+    <input
+      aria-label="Platform size"
+      className="odd-slider"
+      max={MAX_PLATFORM_SIZE}
+      min={7}
+      onChange={(event) => onChange(Number(event.target.value))}
+      step={2}
+      type="range"
+      value={value}
+    />
   );
 }
 
@@ -551,4 +561,11 @@ function blockAt(engine: ArenaEngine, coordinate: Coordinate) {
     region: { min: coordinate, max: coordinate },
     limit: 1,
   }).blocks[0]?.block ?? null;
+}
+
+function isInsideArena(coordinate: Coordinate, engine: ArenaEngine): boolean {
+  const bounds = engine.getContext().bounds;
+  return coordinate.x >= bounds.minX && coordinate.x <= bounds.maxX &&
+    coordinate.y >= bounds.minY && coordinate.y <= bounds.maxY &&
+    coordinate.z >= bounds.minZ && coordinate.z <= bounds.maxZ;
 }

@@ -107,6 +107,8 @@ body::before {
 
 button, input { font: inherit; }
 
+.odd-slider { width: 100%; accent-color: var(--accent); }
+
 button {
   min-height: 2.65rem;
   border: 1px solid var(--border);

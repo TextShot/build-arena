@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createArenaConfig } from "../core/arena-config";
 import { createBlueprint } from "../core/blueprint";
 import { parseBlueprintJson, serializeBlueprintJson } from "./blueprint-json";
 
@@ -56,6 +57,9 @@ describe("blueprint JSON", () => {
     };
     expect(parseBlueprintJson(JSON.stringify(outOfBounds))).toMatchObject({
       success: false,
+    });
+    expect(parseBlueprintJson(JSON.stringify(outOfBounds), createArenaConfig(9))).toMatchObject({
+      success: true,
     });
   });
 });

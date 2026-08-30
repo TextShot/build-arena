@@ -147,19 +147,21 @@ export type BlockChange = Readonly<{
 export type ArenaChange = Readonly<{
   /** Emitted only after a committed, non-no-op mutation. */
   revision: number;
-  commandType: ArenaCommand["type"];
+  commandType: ArenaCommand["type"] | "resize_platform";
   affectedBlocks: number;
-  affectedBounds: Bounds;
+  affectedBounds: Bounds | null;
   changes: readonly BlockChange[];
-  undoId: string;
+  undoId: string | null;
 }>;
 
 export type ArenaChangeListener = (change: ArenaChange) => void;
 
 export interface ArenaEngine {
   apply(command: ArenaCommand): ArenaResult;
+  resizePlatform(platformSize: number): ArenaResult;
   getContext(): ArenaContext;
   getSummary(): BuildSummary;
+  snapshotBlocks(): readonly Block[];
   queryBlocks(query: BlockQuery): BlockQueryResult;
   getSlice(query: SliceQuery): BuildSlice;
   subscribe(listener: ArenaChangeListener): () => void;

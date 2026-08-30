@@ -1,17 +1,17 @@
 import type { ArenaConfig } from "./arena-config";
-import { DEFAULT_ARENA_CONFIG, DEFAULT_MAX_BATCH_EDITS, DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT } from "./arena-config";
+import { createArenaConfig, DEFAULT_ARENA_CONFIG, DEFAULT_MAX_BATCH_EDITS, DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT } from "./arena-config";
 import type { ArenaChange, ArenaContext, ArenaEngine, ArenaResult, BlockQuery, BuildSlice, BuildSummary, SliceQuery } from "./arena-engine";
 import type { BlockId } from "./block-types";
 import { PHASE_A_BLOCK_IDS } from "./block-types";
 import { coordinateFromKey, coordinateKey, type Coordinate, type CoordinateKey } from "./coordinates";
 import { executeCommand, type MutableArenaWorld } from "./arena-commands";
 import { HistoryManager } from "./history";
-import { getSlice, getSummary, queryBlocks, type QueryWorld } from "./arena-queries";
+import { getSlice, getSummary, queryBlocks, snapshotBlocks, type QueryWorld } from "./arena-queries";
 
 type SparseArenaWorld = MutableArenaWorld & QueryWorld;
 
 export function createArenaEngine(): ArenaEngine {
-  const config: ArenaConfig = DEFAULT_ARENA_CONFIG;
+  let config: ArenaConfig = DEFAULT_ARENA_CONFIG;
   const blocks = new Map<CoordinateKey, BlockId>();
   let revision = 0;
   const history = new HistoryManager();
@@ -60,6 +60,77 @@ export function createArenaEngine(): ArenaEngine {
       }
       return execution.result;
     },
+    resizePlatform(platformSize): ArenaResult {
+      let nextConfig: ArenaConfig;
+      try {
+        nextConfig = createArenaConfig(platformSize);
+      } catch (error) {
+        return {
+          success: false,
+          revision,
+          error: error instanceof Error ? error.message : "Invalid platform size",
+          fieldPath: "platformSize",
+        };
+      }
+      if (
+        nextConfig.minX === config.minX &&
+        nextConfig.maxX === config.maxX &&
+        nextConfig.minZ === config.minZ &&
+        nextConfig.maxZ === config.maxZ
+      ) {
+        return {
+          success: true,
+          revision,
+          affectedBlocks: 0,
+          affectedBounds: null,
+          warnings: Object.freeze([]),
+          undoId: null,
+        };
+      }
+      for (const { position } of world.entries()) {
+        if (
+          position.x < nextConfig.minX || position.x > nextConfig.maxX ||
+          position.z < nextConfig.minZ || position.z > nextConfig.maxZ
+        ) {
+          return {
+            success: false,
+            revision,
+            error: "Platform cannot shrink around existing blocks",
+            fieldPath: "platformSize",
+          };
+        }
+      }
+      config = nextConfig;
+      history.clear();
+      revision += 1;
+      const affectedBounds = Object.freeze({
+        min: Object.freeze({ x: config.minX, y: config.minY, z: config.minZ }),
+        max: Object.freeze({ x: config.maxX, y: config.maxY, z: config.maxZ }),
+      });
+      const event: ArenaChange = Object.freeze({
+        revision,
+        commandType: "resize_platform",
+        affectedBlocks: 0,
+        affectedBounds,
+        changes: Object.freeze([]),
+        undoId: null,
+      });
+      for (const listener of listeners) {
+        try {
+          listener(event);
+        } catch {
+          // A subscriber cannot make a committed core mutation fail.
+        }
+      }
+      return {
+        success: true,
+        revision,
+        affectedBlocks: 0,
+        affectedBounds,
+        warnings: Object.freeze([]),
+        undoId: null,
+      };
+    },
     getContext(): ArenaContext {
       return Object.freeze({
         bounds: config,
@@ -74,6 +145,9 @@ export function createArenaEngine(): ArenaEngine {
     },
     getSummary(): BuildSummary {
       return getSummary(world, revision);
+    },
+    snapshotBlocks() {
+      return snapshotBlocks(world);
     },
     queryBlocks(query: BlockQuery): ReturnType<typeof queryBlocks> {
       return queryBlocks(world, query, config, revision);

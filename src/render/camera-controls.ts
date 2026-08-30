@@ -25,21 +25,24 @@ export function applyCameraPreset(
   camera: PerspectiveCamera,
   controls: OrbitControls,
   preset: CameraPreset,
+  platformSize = 7,
 ): void {
+  const scale = Math.max(1, platformSize / 7);
+  controls.maxDistance = Math.max(26, platformSize * 3);
   camera.up.set(0, 1, 0);
   switch (preset) {
     case "top":
       camera.up.set(0, 0, -1);
-      camera.position.set(0, 13, 0.001);
+      camera.position.set(0, 13 * scale, 0.001);
       break;
     case "front":
-      camera.position.set(0, 4.5, 12);
+      camera.position.set(0, 4.5 * scale, 12 * scale);
       break;
     case "right":
-      camera.position.set(12, 4.5, 0);
+      camera.position.set(12 * scale, 4.5 * scale, 0);
       break;
     case "iso":
-      camera.position.set(9, 8, 9);
+      camera.position.set(9 * scale, 8 * scale, 9 * scale);
       break;
   }
   controls.target.copy(CAMERA_TARGET);

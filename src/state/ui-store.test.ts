@@ -53,6 +53,9 @@ describe("useUiStore", () => {
       jsonMode: true,
       platformSize: 9,
     });
+
+    getState().setPlatformSize(102);
+    expect(getState().platformSize).toBe(101);
   });
 
   it("restores defaults with resetUiState", () => {

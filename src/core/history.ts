@@ -47,5 +47,9 @@ export class HistoryManager {
     if (entry) this.undoEntries.push(entry);
     return entry;
   }
-}
 
+  clear(): void {
+    this.undoEntries.length = 0;
+    this.redoEntries.length = 0;
+  }
+}

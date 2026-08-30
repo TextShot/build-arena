@@ -11,9 +11,10 @@ import {
 
 import type { Block } from "../core/block-types";
 import { PHASE_A_BLOCK_IDS, type BlockId } from "../core/block-types";
+import { MAX_PLATFORM_SIZE } from "../core/arena-config";
 import type { Coordinate } from "../core/coordinates";
 
-const MAX_BUILD_BLOCKS = 7 * 7 * 6;
+const MAX_BUILD_BLOCKS = MAX_PLATFORM_SIZE * MAX_PLATFORM_SIZE * 6;
 
 const BLOCK_MATERIALS: Record<BlockId, MeshStandardMaterialParameters> = {
   dirt: { color: 0x8b5a35, roughness: 0.96, metalness: 0 },

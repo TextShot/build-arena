@@ -2,13 +2,12 @@ import { create } from "zustand";
 
 import type { BlockId } from "../core/block-types";
 import type { Coordinate } from "../core/coordinates";
+import { MAX_PLATFORM_SIZE, MIN_PLATFORM_SIZE } from "../core/arena-config";
 
 export type CameraPreset = "iso" | "top" | "front" | "right";
 export type SidebarPanel = "layers" | "activity" | "slider";
 
 const SIDEBAR_COLLAPSED_KEY = "build-arena.sidebarCollapsed";
-const ODD_PLATFORM_MIN = 3;
-const ODD_PLATFORM_MAX = 15;
 
 export type UiState = Readonly<{
   selectedBlock: BlockId;
@@ -17,7 +16,7 @@ export type UiState = Readonly<{
   sidebarCollapsed: boolean;
   activeSidebarPanel: SidebarPanel;
   jsonMode: boolean;
-  /** Odd cube size shared by X, Y, and Z. */
+  /** Odd square platform width shared by X and Z. */
   platformSize: number;
 }>;
 
@@ -66,7 +65,7 @@ function persistCollapsed(sidebarCollapsed: boolean): void {
 function snapOdd(value: number): number {
   const rounded = Math.round(value);
   const odd = rounded % 2 === 0 ? rounded + 1 : rounded;
-  return Math.min(ODD_PLATFORM_MAX, Math.max(ODD_PLATFORM_MIN, odd));
+  return Math.min(MAX_PLATFORM_SIZE, Math.max(MIN_PLATFORM_SIZE, odd));
 }
 
 function copyCoordinate(coordinate: Coordinate | null): Coordinate | null {
