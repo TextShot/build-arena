@@ -4,6 +4,7 @@ import type { ArenaEngine, GenerateShapeCommand } from "../core/arena-engine";
 import { createBlueprint } from "../core/blueprint";
 import { parsePatternDsl } from "../core/pattern-dsl";
 import type { ManualEditLock } from "./manual-edit-lock";
+import { describeToolsPayload, listToolsPayload } from "./tool-catalog";
 import { ARENA_MUTATION_TOOLS, ARENA_TOOL_SCHEMAS, type ArenaToolName } from "./tool-schemas";
 import { arenaResultToolResult, errorToolResult, jsonToolResult } from "./tool-results";
 import type { ToolCallResult } from "./webmcp-types";
@@ -95,8 +96,14 @@ export function createArenaToolHandlers(
         limits: context.limits,
         manualEditLock: hooks.manualEditLock?.getSnapshot() ?? { locked: false, expiresAt: null },
         sizeControl: "Arena platform/height sizing is human-only via the UI sliders; agents read bounds but cannot resize",
+        toolUse: "Call list_tools for the short catalog. Call describe_tools for args and examples.",
       });
     }),
+
+    list_tools: run("list_tools", () => jsonToolResult(listToolsPayload())),
+
+    describe_tools: run("describe_tools", (args) =>
+      jsonToolResult(describeToolsPayload(args.name as string | undefined))),
 
     get_build_summary: run("get_build_summary", () => jsonToolResult(engine.getSummary())),
 

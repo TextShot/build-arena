@@ -1,5 +1,5 @@
 ---
-description: Treat docs/, .superdesign/, .superpowers/, and MY_plan.md as early-project notes, not current truth
+description: Treat docs/, .superdesign/, .superpowers/, and MY_plan.md as early-project notes, not current truth , not use to plan : better ask.
 globs: docs/**/*.md,docs/**/*.mdc,.superdesign/**,.superpowers/**,MY_plan.md
 alwaysApply: false
 ---

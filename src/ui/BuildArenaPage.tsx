@@ -334,7 +334,7 @@ export function BuildArenaPage() {
 
       <header className="arena-topbar">
         <nav className="product-tabs" aria-label="Workspace">
-          <button disabled title="Game tab comes after the arena" type="button">Minecraft</button>
+          <button disabled title="Opens 3d world" type="button">Minecraft</button>
           <button aria-current="page" type="button">Build Arena</button>
         </nav>
         <div className="topbar-actions">

@@ -27,6 +27,7 @@ describe("arena tool handlers", () => {
     handlers.render_build_views({});
 
     expect(context.revision).toBe(0);
+    expect(context.toolUse).toEqual(expect.stringContaining("list_tools"));
     expect(summary.revision).toBe(0);
     expect(engine.getContext().revision).toBe(0);
   });
@@ -188,5 +189,20 @@ describe("arena tool handlers", () => {
     handlers.set_manual_edit_lock({ locked: false });
     expect(handlers.undo_build_change({ expectedRevision: 1 }).isError).toBe(true);
     expect(engine.getContext().revision).toBe(1);
+  });
+
+  it("lists a short catalog and describes one tool on request", () => {
+    const { handlers } = testHandlers();
+    const list = payload(handlers.list_tools({}));
+    expect(list.loop).toEqual(expect.stringContaining("lock"));
+    expect(list.tools).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "generate_shape", when: expect.any(String), ex: expect.any(String) }),
+    ]));
+
+    const one = payload(handlers.describe_tools({ name: "set_blocks" }));
+    expect(one.tools).toHaveLength(1);
+    expect(one.tools).toEqual([
+      expect.objectContaining({ name: "set_blocks", args: expect.stringContaining("expectedRevision") }),
+    ]);
   });
 });

@@ -1,0 +1,74 @@
+feature: workspace-load
+url: http://127.0.0.1:4173/
+title: Build Arena
+loading-space: absent
+
+- role: document
+  name: Build Arena
+  children:
+    - role: link
+      name: Skip to Build Arena
+    - role: button
+      name: Minecraft
+      states: [disabled]
+    - role: button
+      name: Build Arena
+      states: [current]
+    - role: button
+      name: Export
+    - role: button
+      name: Undo
+    - role: button
+      name: Redo
+    - role: button
+      name: Collapse editor sidebar
+      states: [expanded]
+    - role: button
+      name: Isometric
+      states: [pressed]
+    - role: button
+      name: Top
+    - role: button
+      name: Front
+    - role: button
+      name: Right
+    - role: button
+      name: Select Dirt
+    - role: button
+      name: Select Stone
+      states: [pressed]
+    - role: button
+      name: Select Oak log
+    - role: button
+      name: Select Oak planks
+    - role: button
+      name: Select Leaves
+    - role: button
+      name: Select Glass
+    - role: button
+      name: Select Obsidian
+    - role: button
+      name: Layers
+      states: [pressed]
+    - role: button
+      name: Activity
+    - role: button
+      name: Slider
+    - role: heading
+      name: Build Arena
+      level: 1
+    - role: navigation
+      name: Workspace
+    - role: region
+      name: Three-dimensional arena viewport
+    - role: heading
+      name: Block palette
+      level: 2
+    - role: navigation
+      name: Editor panels
+    - role: region
+      name: Layers
+    - role: heading
+      name: Layers
+      level: 3
+      name: No layers yet

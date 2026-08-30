@@ -1,5 +1,6 @@
 import { MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
 import { ALL_BLOCK_IDS, FACINGS } from "../core/block-types";
+import { DESCRIBE_TOOLS_NAME_ENUM } from "./tool-catalog";
 
 const MAX_RADIUS = (MAX_PLATFORM_SIZE - 1) / 2;
 
@@ -86,21 +87,39 @@ const shapeKind = {
 } as const;
 
 export const ARENA_TOOL_SCHEMAS = Object.freeze({
+  list_tools: {
+    type: "object",
+    description: "Short catalog: name, when, tiny example. Call this first. Use describe_tools for args.",
+    additionalProperties: false,
+    properties: {},
+  },
+  describe_tools: {
+    type: "object",
+    description: "Detailed args and examples. Pass name for one tool; omit name for every tool (larger payload).",
+    additionalProperties: false,
+    properties: {
+      name: {
+        type: "string",
+        enum: DESCRIBE_TOOLS_NAME_ENUM,
+        description: "Tool to describe. Omit to list every tool.",
+      },
+    },
+  },
   get_arena_context: {
     type: "object",
-    description: "Read the coordinate convention, current bounds, revision, block types, and operation limits.",
+    description: "Returns context: bounds, revision, types, limits, lock state, and toolUse. Call list_tools for a summary.",
     additionalProperties: false,
     properties: {},
   },
   get_build_summary: {
     type: "object",
-    description: "Read the current revision, block count, per-material counts, occupied bounds, and object groups.",
+    description: "Census of placed blocks: revision, counts, occupied bounds, and object groups. Use this after context and after writes; it does not list every cell.",
     additionalProperties: false,
     properties: {},
   },
   query_blocks: {
     type: "object",
-    description: "Query build blocks with optional region/layer/type filters. Results are paginated and deterministic.",
+    description: "Exact placed cells with optional region, layer, or type filters. Paginated and deterministic. Use this for coordinates; the viewport is visual only.",
     additionalProperties: false,
     properties: {
       region: bounds,
@@ -180,7 +199,7 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   },
   generate_shape: {
     type: "object",
-    description: "Fill a floor, wall, filled box, or hollow box atomically. Accepts either structured fields or a compact pattern run-string like oak_planks_1@0,1,0-(x5).",
+    description: "Primary volume fill: floor, wall, filled box, or hollow box, or a compact run-string like oak_planks_1@0,1,0-(x5). Prefer this over listing every cell in set_blocks.",
     oneOf: [
       {
         title: "pattern",
@@ -210,7 +229,7 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   },
   transform_region: {
     type: "object",
-    description: "Copy, move, rotate, mirror, or replace block types inside a region atomically. Grouping and state are preserved and reoriented.",
+    description: "Primary region edit: copy, move, rotate, mirror, or replace types atomically. Grouping and state are preserved. Prefer this over rewriting the region with set_blocks.",
     oneOf: [
       {
         title: "copy",
@@ -309,6 +328,8 @@ export const ARENA_MUTATION_TOOLS: readonly ArenaToolName[] = Object.freeze([
 ]);
 
 export const READ_ONLY_TOOLS: readonly ArenaToolName[] = Object.freeze([
+  "list_tools",
+  "describe_tools",
   "get_arena_context",
   "get_build_summary",
   "query_blocks",

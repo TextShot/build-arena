@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Ajv from "ajv";
 
+import { LIST_TOOL_CARDS } from "./tool-catalog";
 import { ARENA_MUTATION_TOOLS, ARENA_TOOL_NAMES, ARENA_TOOL_SCHEMAS } from "./tool-schemas";
 
 const ajv = new Ajv({ allErrors: true, strict: true });
@@ -14,6 +15,8 @@ describe("arena tool schemas", () => {
 
   it("rejects additional properties on every tool", () => {
     const validArgs: Record<string, object> = {
+      list_tools: {},
+      describe_tools: {},
       get_arena_context: {},
       get_build_summary: {},
       query_blocks: {},
@@ -92,5 +95,9 @@ describe("arena tool schemas", () => {
       expect(validate({ ...base, operation, ...required }), `${operation} valid`).toBe(true);
       expect(validate({ ...base, operation, ...required, ...unrelated }), `${operation} unrelated field`).toBe(false);
     }
+  });
+
+  it("keeps list_tools cards in lockstep with registered tool names", () => {
+    expect(LIST_TOOL_CARDS.map((card) => card.name).sort()).toEqual([...ARENA_TOOL_NAMES].sort());
   });
 });

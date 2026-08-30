@@ -39,6 +39,8 @@ describe("registerArenaTools", () => {
     })).toBe(true);
     expect([...tools.keys()].sort()).toEqual([...ARENA_TOOL_NAMES].sort());
     expect(tools.get("get_arena_context")?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.get("list_tools")?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.get("describe_tools")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.get("set_manual_edit_lock")?.annotations?.readOnlyHint).toBe(false);
     expect(tools.get("set_blocks")?.annotations?.readOnlyHint).toBe(false);
 
