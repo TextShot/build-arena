@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createArenaConfig } from "../core/arena-config";
 import { createArenaEngine } from "../core/arena-world";
+import { createManualEditLock } from "./manual-edit-lock";
 import { createArenaToolHandlers } from "./tool-handlers";
 import type { ToolCallResult } from "./webmcp-types";
 
@@ -9,10 +10,15 @@ function payload(result: ToolCallResult): Record<string, unknown> {
   return JSON.parse(result.content[0]?.text ?? "{}") as Record<string, unknown>;
 }
 
+function testHandlers(engine = createArenaEngine()) {
+  const manualEditLock = createManualEditLock();
+  const handlers = createArenaToolHandlers(engine, { manualEditLock });
+  return { engine, handlers, manualEditLock };
+}
+
 describe("arena tool handlers", () => {
   it("reads never mutate the revision", () => {
-    const engine = createArenaEngine();
-    const handlers = createArenaToolHandlers(engine);
+    const { engine, handlers } = testHandlers();
 
     const context = payload(handlers.get_arena_context({}));
     const summary = payload(handlers.get_build_summary({}));
@@ -26,8 +32,7 @@ describe("arena tool handlers", () => {
   });
 
   it("rejects schema-invalid arguments with a field path and no mutation", () => {
-    const engine = createArenaEngine();
-    const handlers = createArenaToolHandlers(engine);
+    const { engine, handlers } = testHandlers();
 
     const result = handlers.set_blocks({
       expectedRevision: 0,
@@ -40,8 +45,8 @@ describe("arena tool handlers", () => {
   });
 
   it("applies writes through the shared engine and fails stale writes atomically", () => {
-    const engine = createArenaEngine();
-    const handlers = createArenaToolHandlers(engine);
+    const { engine, handlers } = testHandlers();
+    handlers.set_manual_edit_lock({ locked: true });
 
     const write = payload(handlers.set_blocks({
       expectedRevision: 0,
@@ -63,8 +68,8 @@ describe("arena tool handlers", () => {
   });
 
   it("save_blueprint returns a canonical schemaVersion 2 blueprint", () => {
-    const engine = createArenaEngine();
-    const handlers = createArenaToolHandlers(engine);
+    const { engine, handlers } = testHandlers();
+    handlers.set_manual_edit_lock({ locked: true });
     handlers.set_blocks({
       expectedRevision: 0,
       edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "obsidian" }],
@@ -83,7 +88,8 @@ describe("arena tool handlers", () => {
 
   it("generate_shape accepts the compact DSL and groups the result", () => {
     const engine = createArenaEngine(createArenaConfig(11));
-    const handlers = createArenaToolHandlers(engine);
+    const { handlers } = testHandlers(engine);
+    handlers.set_manual_edit_lock({ locked: true });
 
     const result = payload(handlers.generate_shape({
       expectedRevision: 0,
@@ -96,8 +102,8 @@ describe("arena tool handlers", () => {
   });
 
   it("generate_shape dryRun reports without mutating", () => {
-    const engine = createArenaEngine();
-    const handlers = createArenaToolHandlers(engine);
+    const { engine, handlers } = testHandlers();
+    handlers.set_manual_edit_lock({ locked: true });
 
     const result = payload(handlers.generate_shape({
       expectedRevision: 0,
@@ -114,7 +120,12 @@ describe("arena tool handlers", () => {
   it("transform_region works and render_build_views reports metadata plus hook", () => {
     const engine = createArenaEngine();
     const views: string[] = [];
-    const handlers = createArenaToolHandlers(engine, { onRenderView: (view) => views.push(view) });
+    const manualEditLock = createManualEditLock();
+    const handlers = createArenaToolHandlers(engine, {
+      manualEditLock,
+      onRenderView: (view) => views.push(view),
+    });
+    handlers.set_manual_edit_lock({ locked: true });
 
     handlers.set_blocks({
       expectedRevision: 0,
@@ -137,7 +148,9 @@ describe("arena tool handlers", () => {
   it("reports every call to the activity hook", () => {
     const engine = createArenaEngine();
     const calls: [string, boolean][] = [];
+    const manualEditLock = createManualEditLock();
     const handlers = createArenaToolHandlers(engine, {
+      manualEditLock,
       onToolCall: (name, success) => calls.push([name, success]),
     });
 
@@ -148,5 +161,32 @@ describe("arena tool handlers", () => {
       ["get_build_summary", true],
       ["set_blocks", false],
     ]);
+  });
+
+  it("requires the manual edit lock for agent mutations", () => {
+    const { engine, handlers } = testHandlers();
+    const edit = {
+      expectedRevision: 0,
+      edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "stone" }],
+    };
+
+    const unlockedWrite = handlers.set_blocks(edit);
+    expect(unlockedWrite.isError).toBe(true);
+    expect(payload(unlockedWrite)).toMatchObject({
+      success: false,
+      error: "Lock manual editing before changing the arena",
+    });
+    expect(engine.getContext().revision).toBe(0);
+
+    expect(payload(handlers.set_manual_edit_lock({ locked: true }))).toMatchObject({
+      success: true,
+      revision: 0,
+      manualEditsLocked: true,
+    });
+    expect(payload(handlers.set_blocks(edit))).toMatchObject({ success: true, revision: 1 });
+
+    handlers.set_manual_edit_lock({ locked: false });
+    expect(handlers.undo_build_change({ expectedRevision: 1 }).isError).toBe(true);
+    expect(engine.getContext().revision).toBe(1);
   });
 });

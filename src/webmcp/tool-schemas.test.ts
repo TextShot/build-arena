@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import Ajv from "ajv";
 
-import { ARENA_TOOL_NAMES, ARENA_TOOL_SCHEMAS, READ_ONLY_TOOLS } from "./tool-schemas";
+import { ARENA_MUTATION_TOOLS, ARENA_TOOL_NAMES, ARENA_TOOL_SCHEMAS } from "./tool-schemas";
 
 const ajv = new Ajv({ allErrors: true, strict: true });
 
@@ -18,6 +18,7 @@ describe("arena tool schemas", () => {
       get_build_summary: {},
       query_blocks: {},
       get_build_slices: { axis: "y", index: 1 },
+      set_manual_edit_lock: { locked: true },
       set_blocks: {
         expectedRevision: 0,
         edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "stone" }],
@@ -45,9 +46,8 @@ describe("arena tool schemas", () => {
   });
 
   it("requires expectedRevision on every write tool", () => {
-    const writes = ARENA_TOOL_NAMES.filter((name) => !READ_ONLY_TOOLS.includes(name) && name !== "save_blueprint");
-    expect(writes).toEqual(["set_blocks", "undo_build_change", "generate_shape", "transform_region"]);
-    for (const name of writes) {
+    expect(ARENA_MUTATION_TOOLS).toEqual(["set_blocks", "undo_build_change", "generate_shape", "transform_region"]);
+    for (const name of ARENA_MUTATION_TOOLS) {
       const schema = ARENA_TOOL_SCHEMAS[name] as {
         required?: readonly string[];
         oneOf?: readonly { required?: readonly string[] }[];

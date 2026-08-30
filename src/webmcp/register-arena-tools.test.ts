@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createArenaEngine } from "../core/arena-world";
+import { createManualEditLock } from "./manual-edit-lock";
 import { registerArenaTools } from "./register-arena-tools";
 import { ARENA_TOOL_NAMES } from "./tool-schemas";
 import type { ModelContext, ToolDescriptor } from "./webmcp-types";
@@ -31,11 +32,17 @@ describe("registerArenaTools", () => {
     const { modelContext, tools } = fakeModelContext();
     const controller = new AbortController();
 
-    expect(await registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(true);
+    expect(await registerArenaTools(engine, {
+      signal: controller.signal,
+      modelContext,
+      hooks: { manualEditLock: createManualEditLock() },
+    })).toBe(true);
     expect([...tools.keys()].sort()).toEqual([...ARENA_TOOL_NAMES].sort());
     expect(tools.get("get_arena_context")?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.get("set_manual_edit_lock")?.annotations?.readOnlyHint).toBe(false);
     expect(tools.get("set_blocks")?.annotations?.readOnlyHint).toBe(false);
 
+    await tools.get("set_manual_edit_lock")?.execute({ locked: true });
     const write = await tools.get("set_blocks")?.execute({
       expectedRevision: 0,
       edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "stone" }],
