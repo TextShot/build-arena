@@ -31,9 +31,9 @@ const DETAILED_BY_NAME: Readonly<Record<ListCard["name"], Readonly<{
     when: "Start here. Cheap names/when/ex. Use describe_tools for one tool's args.",
   },
   describe_tools: {
-    args: "{name?}",
+    args: "{name}",
     example: "{name:\"generate_shape\"}",
-    when: "Need arguments or a fuller example. Omit name for every tool (larger).",
+    when: "Need one tool's full input schema and example.",
   },
   get_arena_context: {
     args: "{}",
@@ -96,13 +96,14 @@ export function listToolsPayload(): Readonly<{ loop: string; tools: typeof LIST_
   return Object.freeze({ loop: LIST_TOOLS_LOOP, tools: LIST_TOOL_CARDS });
 }
 
-export function describeToolsPayload(name?: string): Readonly<{ tools: readonly object[] }> {
-  const names = name ? [name as ListCard["name"]] : LIST_TOOL_CARDS.map((card) => card.name);
+export function describeToolsPayload(
+  name: ListCard["name"],
+  inputSchema: object,
+): Readonly<{ tools: readonly object[] }> {
   return Object.freeze({
-    tools: Object.freeze(names.map((toolName) => {
-      const detail = DETAILED_BY_NAME[toolName];
-      return Object.freeze({ name: toolName, ...detail });
-    })),
+    tools: Object.freeze([
+      Object.freeze({ name, ...DETAILED_BY_NAME[name], inputSchema }),
+    ]),
   });
 }
 

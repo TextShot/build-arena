@@ -1,6 +1,6 @@
 import type { ArenaEngine } from "../core/arena-engine";
+import { buildHostToolDescriptors } from "./host-catalog-payload";
 import { createArenaToolHandlers, type ArenaToolHooks } from "./tool-handlers";
-import { ARENA_TOOL_NAMES, ARENA_TOOL_SCHEMAS, READ_ONLY_TOOLS, type ArenaToolName } from "./tool-schemas";
 import type { ModelContext } from "./webmcp-types";
 
 export type RegisterArenaToolsOptions = Readonly<{
@@ -9,12 +9,9 @@ export type RegisterArenaToolsOptions = Readonly<{
   hooks?: ArenaToolHooks;
   /** Injection point for tests; defaults to the feature-detected document.modelContext. */
   modelContext?: ModelContext;
+  /** Reports registration failures after all partial registrations have been removed. */
+  onRegistrationError?: (error: unknown) => void;
 }>;
-
-function describeTool(name: ArenaToolName): string {
-  const schema = ARENA_TOOL_SCHEMAS[name] as { description?: string };
-  return schema.description ?? name;
-}
 
 /**
  * Registers the Build Arena tools once for the current page context.
@@ -34,22 +31,29 @@ export async function registerArenaTools(
     return false;
   }
 
+  const registrationController = new AbortController();
+  const abortRegistrations = () => registrationController.abort(options.signal.reason);
+  options.signal.addEventListener("abort", abortRegistrations, { once: true });
+
   try {
     const handlers = createArenaToolHandlers(engine, options.hooks);
-    for (const name of ARENA_TOOL_NAMES) {
+    for (const descriptor of buildHostToolDescriptors()) {
+      if (registrationController.signal.aborted) {
+        throw registrationController.signal.reason ?? new Error("Tool registration aborted");
+      }
       await modelContext.registerTool(
         {
-          name,
-          description: describeTool(name),
-          inputSchema: ARENA_TOOL_SCHEMAS[name] as unknown as Record<string, unknown>,
-          annotations: { readOnlyHint: READ_ONLY_TOOLS.includes(name) },
-          execute: (args: unknown) => handlers[name](args),
+          ...descriptor,
+          execute: (args: unknown) => handlers[descriptor.name](args),
         },
-        { signal: options.signal },
+        { signal: registrationController.signal },
       );
     }
     return true;
-  } catch {
+  } catch (error) {
+    registrationController.abort(error);
+    options.signal.removeEventListener("abort", abortRegistrations);
+    options.onRegistrationError?.(error);
     return false;
   }
 }

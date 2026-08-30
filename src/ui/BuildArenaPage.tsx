@@ -189,6 +189,9 @@ export function BuildArenaPage() {
     const controller = new AbortController();
     void registerArenaTools(engine, {
       signal: controller.signal,
+      onRegistrationError: () => {
+        if (!controller.signal.aborted) setStatusMessage("Agent tools unavailable. Reload to retry.");
+      },
       hooks: {
         manualEditLock,
         onToolCall: (name, success, revision, payload) =>

@@ -8,10 +8,10 @@ description: Use this when adding, changing, or reviewing WebMCP / site MCP tool
 This skill is a **how-to**. Follow it whenever you add or change a page tool. Do not invent a backend MCP server. Tools live on the open Build Arena tab.
 
 ```text
-You (agent)  -->  registerTool  -->  thin adapter  -->  arena command engine
-                                              |
-                                              v
-                                    world store --> Three.js
+You (agent)  -->  host schema  -->  thin adapter  -->  full AJV schema  -->  arena command engine
+                                                                    |
+                                                                    v
+                                                          world store --> Three.js
 ```
 
 Load `references/agentic-javascript-tools.md` before writing `registerTool` code. Load `references/webmcp.md` if you need the rules. Load `references/tool-recipes.md` for copy-paste schemas.
@@ -47,45 +47,46 @@ Keep tools in:
 ```text
 src/webmcp/
   register-arena-tools.ts   register + AbortController
+  host-catalog-payload.ts   byte-small host descriptors
   tool-schemas.ts           JSON Schema per tool
   tool-results.ts           success / error shapes
 ```
 
-One tool = one schema + one `execute` wrapper + one `registerTool` call.
+One tool = one full execute schema + one `execute` wrapper + one `registerTool` call. The host-visible schema may be a deliberate stub for non-discovery tools.
 
 ## 4. Name, describe, schema
 
 - Name: `verb_noun`, snake_case, exact behaviour (`set_blocks`, not `do_edit`).
 - Description: what it does, what it returns, important limits. Positive. No "don't call X after Y".
-- `inputSchema`: JSON Schema object. Every property has `type` and `description`.
+- Full execute schema: every property has `type` and `description`.
 - Always `additionalProperties: false`.
 - Enums for block ids and axes. Integer coordinates. Max array lengths.
 - Reads: empty or filter object. Arena mutations include `expectedRevision`; UI-only lock state does not change the arena revision.
 - Optional `dryRun` on large writes.
 
+**Build Arena / Codex Browser optimization only:** keep `list_tools` and `describe_tools` fully described at registration. Other host descriptors use the shared permissive stub from `host-catalog-payload.ts`; `describe_tools({name})` returns the selected full schema. Handlers must still validate every call with `ARENA_TOOL_SCHEMAS`. Never use the permissive host stub for execute-time validation, and do not copy this optimization to another WebMCP host without measuring and testing that host.
+
+Fresh-agent reliability is not established by unit tests or by an informed agent reusing the same task. Before shipping changes to this flow, open a fresh Codex task with no prior schema context and verify it follows `list_tools` → `describe_tools({name})` → target tool. Until that passes, describe the host stubs as experimental rather than proven reliable.
+
 Phase A block ids: `dirt`, `stone`, `oak_log`, `oak_planks`, `leaves`, `glass`, `obsidian`.
 
 Coordinates are `(x, y, z)`. X/Z ground, Y height. Platform at `y = 0` is read-only.
 
-## 5. Write `execute`
+## 5. Connect host descriptors to validated handlers
 
-Copy this skeleton. Swap names and the engine call.
+Use the same descriptor builder that the byte-budget test measures. `createArenaToolHandlers` compiles and validates `ARENA_TOOL_SCHEMAS`; the host stub never replaces that validation.
 
 ```ts
-import type { ArenaEngine } from "../core/arena-commands";
+const handlers = createArenaToolHandlers(engine, hooks);
 
-export function makeSetBlocksTool(engine: ArenaEngine) {
-  return {
-    name: "set_blocks",
-    description:
-      "Place, atomically replace, or remove explicit blocks. Each item names block type and state. Fails as a whole if any cell is invalid or expectedRevision does not match.",
-    inputSchema: setBlocksSchema, // from tool-schemas.ts
-    async execute(input: SetBlocksInput) {
-      const result = engine.apply({ type: "set_blocks", ...input });
-      return result; // { success, revision, affectedBlocks, affectedBounds, warnings, undoId } or { success: false, error, fieldPath? }
+for (const descriptor of buildHostToolDescriptors()) {
+  await document.modelContext.registerTool(
+    {
+      ...descriptor,
+      execute: (args) => handlers[descriptor.name](args),
     },
-    annotations: { readOnlyHint: false },
-  };
+    { signal },
+  );
 }
 ```
 
@@ -137,17 +138,19 @@ Build these, and only these, until they work. Details and schemas: `references/t
 
 | # | Tool | Kind | Engine call |
 | --- | --- | --- | --- |
-| 1 | `get_arena_context` | read | config + block catalogue + revision |
-| 2 | `get_build_summary` | read | counts, occupied bounds, revision |
-| 3 | `query_blocks` | read | region / layer / type filter |
-| 4 | `get_build_slices` | read | 2D X/Z, X/Y, Z/Y grids |
-| 5 | `set_manual_edit_lock` | UI write | lock human writes before agent mutations; unlock when finished |
-| 6 | `set_blocks` | write | place / atomic replace / remove |
-| 7 | `generate_shape` | write | floor, wall, filled/hollow box; later run-strings |
-| 8 | `undo_build_change` | write | undo one history entry |
-| 9 | `render_build_views` | read-ish | update visible diagnostic views, return ids |
-| 10 | `transform_region` | write | copy / move / rotate / mirror / replace type |
-| 11 | `save_blueprint` | write | validate + serialize |
+| 1 | `list_tools` | read | short names, use cases, examples |
+| 2 | `describe_tools` | read | one full input schema + example |
+| 3 | `get_arena_context` | read | config + block catalogue + revision |
+| 4 | `get_build_summary` | read | counts, occupied bounds, revision |
+| 5 | `query_blocks` | read | region / layer / type filter |
+| 6 | `get_build_slices` | read | 2D X/Z, X/Y, Z/Y grids |
+| 7 | `set_manual_edit_lock` | UI write | lock human writes before agent mutations; unlock when finished |
+| 8 | `set_blocks` | write | place / atomic replace / remove |
+| 9 | `generate_shape` | write | floor, wall, filled/hollow box; later run-strings |
+| 10 | `undo_build_change` | write | undo one history entry |
+| 11 | `render_build_views` | read-ish | update visible diagnostic views, return ids |
+| 12 | `transform_region` | write | copy / move / rotate / mirror / replace type |
+| 13 | `save_blueprint` | write | validate + serialize |
 
 Agent loop those tools should support. Arena mutations reject unless the manual edit lock is active; release it in the final step even after a failure:
 
@@ -161,7 +164,11 @@ set_manual_edit_lock(true) → get_arena_context → get_build_summary → query
 
 - [ ] Command exists in `src/core/` and has a test
 - [ ] Tool is a thin wrapper (no extra voxel logic)
-- [ ] Schema is narrow, described, `additionalProperties: false`
+- [ ] Full execute schema is narrow, described, `additionalProperties: false`
+- [ ] Discovery tools retain real host schemas; other host schemas use the shared stub
+- [ ] `describe_tools` requires one name and returns that tool's full input schema
+- [ ] Compact host descriptors remain within the named byte budget
+- [ ] A fresh Codex task follows discovery before calling a stubbed tool; otherwise reliability remains unverified
 - [ ] Read tools have `readOnlyHint: true`
 - [ ] Writes take `expectedRevision` and return revision + bounds + undoId
 - [ ] Arena mutations require the manual edit lock; normal completion and timeout both release it

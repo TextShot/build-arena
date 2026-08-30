@@ -96,13 +96,14 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   },
   describe_tools: {
     type: "object",
-    description: "Detailed args and examples. Pass name for one tool; omit name for every tool (larger payload).",
+    description: "Detailed args, example, and full input schema for one tool. Pass exactly one name.",
     additionalProperties: false,
+    required: ["name"],
     properties: {
       name: {
         type: "string",
         enum: DESCRIBE_TOOLS_NAME_ENUM,
-        description: "Tool to describe. Omit to list every tool.",
+        description: "Tool to describe.",
       },
     },
   },

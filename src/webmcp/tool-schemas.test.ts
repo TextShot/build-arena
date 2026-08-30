@@ -16,7 +16,7 @@ describe("arena tool schemas", () => {
   it("rejects additional properties on every tool", () => {
     const validArgs: Record<string, object> = {
       list_tools: {},
-      describe_tools: {},
+      describe_tools: { name: "set_blocks" },
       get_arena_context: {},
       get_build_summary: {},
       query_blocks: {},
@@ -46,6 +46,13 @@ describe("arena tool schemas", () => {
       expect(validate(validArgs[name]), `${name} valid args`).toBe(true);
       expect(validate({ ...validArgs[name], unexpected: true }), `${name} extra property`).toBe(false);
     }
+  });
+
+  it("requires one tool name for describe_tools", () => {
+    const validate = ajv.compile(ARENA_TOOL_SCHEMAS.describe_tools);
+
+    expect(validate({})).toBe(false);
+    expect(validate({ name: "set_blocks" })).toBe(true);
   });
 
   it("requires expectedRevision on every arena mutation tool", () => {

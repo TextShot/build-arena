@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { createArenaEngine } from "../core/arena-world";
+import { HOST_INPUT_STUB } from "./host-catalog-payload";
 import { createManualEditLock } from "./manual-edit-lock";
 import { registerArenaTools } from "./register-arena-tools";
-import { ARENA_TOOL_NAMES } from "./tool-schemas";
+import { ARENA_TOOL_NAMES, ARENA_TOOL_SCHEMAS } from "./tool-schemas";
 import type { ModelContext, ToolDescriptor } from "./webmcp-types";
 
 /** Mimics the draft spec: registrations live until the provided signal aborts. */
-function fakeModelContext() {
+function fakeModelContext(rejectName?: string) {
   const tools = new Map<string, ToolDescriptor>();
   const modelContext: ModelContext = {
     async registerTool(tool, options) {
+      if (tool.name === rejectName) throw new Error(`Rejected ${tool.name}`);
       tools.set(tool.name, tool);
       options?.signal?.addEventListener("abort", () => tools.delete(tool.name), { once: true });
     },
@@ -43,6 +45,17 @@ describe("registerArenaTools", () => {
     expect(tools.get("describe_tools")?.annotations?.readOnlyHint).toBe(true);
     expect(tools.get("set_manual_edit_lock")?.annotations?.readOnlyHint).toBe(false);
     expect(tools.get("set_blocks")?.annotations?.readOnlyHint).toBe(false);
+    expect(tools.get("list_tools")?.inputSchema).toBe(ARENA_TOOL_SCHEMAS.list_tools);
+    expect(tools.get("describe_tools")?.inputSchema).toBe(ARENA_TOOL_SCHEMAS.describe_tools);
+    expect(tools.get("set_blocks")?.inputSchema).toBe(HOST_INPUT_STUB);
+
+    const invalid = await tools.get("set_blocks")?.execute({
+      expectedRevision: 0,
+      edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "stone" }],
+      unexpected: true,
+    });
+    expect(invalid?.isError).toBe(true);
+    expect(engine.getContext().revision).toBe(0);
 
     await tools.get("set_manual_edit_lock")?.execute({ locked: true });
     const write = await tools.get("set_blocks")?.execute({
@@ -82,17 +95,17 @@ describe("registerArenaTools", () => {
     expect(tools.size).toBe(0);
   });
 
-  it("returns false when registerTool rejects", async () => {
-    const modelContext: ModelContext = {
-      registerTool() {
-        return Promise.reject(new Error("NotAllowedError"));
-      },
-    };
+  it("rolls back partial registrations and reports the registration error", async () => {
+    const { modelContext, tools } = fakeModelContext("get_build_slices");
     const controller = new AbortController();
+    const errors: unknown[] = [];
 
     expect(await registerArenaTools(createArenaEngine(), {
       signal: controller.signal,
       modelContext,
+      onRegistrationError: (error: unknown) => errors.push(error),
     })).toBe(false);
+    expect(tools.size).toBe(0);
+    expect(errors).toEqual([expect.objectContaining({ message: "Rejected get_build_slices" })]);
   });
 });

@@ -4,6 +4,7 @@ import { createArenaConfig } from "../core/arena-config";
 import { createArenaEngine } from "../core/arena-world";
 import { createManualEditLock } from "./manual-edit-lock";
 import { createArenaToolHandlers } from "./tool-handlers";
+import { ARENA_TOOL_SCHEMAS } from "./tool-schemas";
 import type { ToolCallResult } from "./webmcp-types";
 
 function payload(result: ToolCallResult): Record<string, unknown> {
@@ -202,7 +203,13 @@ describe("arena tool handlers", () => {
     const one = payload(handlers.describe_tools({ name: "set_blocks" }));
     expect(one.tools).toHaveLength(1);
     expect(one.tools).toEqual([
-      expect.objectContaining({ name: "set_blocks", args: expect.stringContaining("expectedRevision") }),
+      expect.objectContaining({
+        name: "set_blocks",
+        args: expect.stringContaining("expectedRevision"),
+        inputSchema: ARENA_TOOL_SCHEMAS.set_blocks,
+      }),
     ]);
+
+    expect(handlers.describe_tools({}).isError).toBe(true);
   });
 });

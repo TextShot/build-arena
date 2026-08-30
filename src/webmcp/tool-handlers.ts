@@ -102,8 +102,10 @@ export function createArenaToolHandlers(
 
     list_tools: run("list_tools", () => jsonToolResult(listToolsPayload())),
 
-    describe_tools: run("describe_tools", (args) =>
-      jsonToolResult(describeToolsPayload(args.name as string | undefined))),
+    describe_tools: run("describe_tools", (args) => {
+      const name = args.name as ArenaToolName;
+      return jsonToolResult(describeToolsPayload(name, ARENA_TOOL_SCHEMAS[name]));
+    }),
 
     get_build_summary: run("get_build_summary", () => jsonToolResult(engine.getSummary())),
 
