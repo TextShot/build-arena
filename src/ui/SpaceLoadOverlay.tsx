@@ -42,6 +42,17 @@ export function SpaceLoadOverlay({ spaceReady }: SpaceLoadOverlayProps) {
   const shouldDismiss = spaceLoadShouldDismiss(elapsedMs, spaceReady);
 
   useEffect(() => {
+    if (!shouldDismiss) return;
+    const audio = document.querySelector("#theme-music");
+    if (!(audio instanceof HTMLAudioElement)) return;
+    audio.volume = 0.4;
+    const kick = () => { void audio.play(); };
+    void audio.play().catch(() => {
+      window.addEventListener("pointerdown", kick, { once: true });
+    });
+  }, [shouldDismiss]);
+
+  useEffect(() => {
     if (!shouldDismiss || fading || gone) return;
     const fade = window.setTimeout(() => setFading(true), FADE_AFTER_COMPLETE_MS);
     return () => window.clearTimeout(fade);

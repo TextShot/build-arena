@@ -55,7 +55,15 @@ const playBtn = document.getElementById("space-play");
 const loadStarted = performance.now();
 const spaceReady = true;
 
+function startThemeMusic() {
+  const audio = document.getElementById("theme-music");
+  if (!(audio instanceof HTMLAudioElement)) return;
+  audio.volume = 0.4;
+  void audio.play().catch(() => {});
+}
+
 function dismissLoadAndPlay() {
+  startThemeMusic();
   loadEl?.remove();
   world.lock();
 }
@@ -72,6 +80,7 @@ function tickLoad() {
     loadFill.style.width = "100%";
     loadBar.setAttribute("aria-valuenow", "100");
     if (playBtn) playBtn.hidden = false;
+    startThemeMusic();
     return;
   }
   requestAnimationFrame(tickLoad);
