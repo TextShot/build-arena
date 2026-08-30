@@ -108,7 +108,7 @@ export function startPlacement(world, blocks) {
       return;
     }
     if (!world.locked()) return;
-    if (event.button === 0 || event.button === 2) {
+    if (event.button === 0) {
       event.stopImmediatePropagation();
       event.preventDefault();
       commit();

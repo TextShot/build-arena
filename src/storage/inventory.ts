@@ -40,6 +40,19 @@ export type StorageWrite = Readonly<{ ok: true }> | Readonly<{ ok: false; error:
 const EMPTY_FILE: InventoryFile = Object.freeze({ version: 1, entries: [] });
 const QUOTA_ERROR = "Inventory is full (browser storage quota)";
 
+/** Keep Arena x/z so Open in 3D lands on the same platform cells. */
+export function toArenaBlocks(blocks: readonly Block[]): InventoryBlock[] {
+  return blocks.map((block) => {
+    const item: InventoryBlock = {
+      x: block.position.x,
+      y: block.position.y,
+      z: block.position.z,
+      block: block.block,
+    };
+    return block.state ? Object.freeze({ ...item, state: block.state }) : Object.freeze(item);
+  });
+}
+
 export function toRelativeBlocks(blocks: readonly Block[]): InventoryBlock[] {
   if (blocks.length === 0) return [];
   let minX = blocks[0].position.x;

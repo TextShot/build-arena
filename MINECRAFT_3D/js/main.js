@@ -4,7 +4,8 @@ import { BLOCKS, HOTBAR_IDS } from "./blocks.js";
 import { registerPlaySpaceTools } from "./ai.js";
 import { iconCanvas } from "./textures.js";
 import { readAndClearHandoff, readInventory } from "./inventory.js";
-import { isPlacing, startPlacement } from "./placement.js";
+import { isPlacing, placeBlocksAtOrigin, startPlacement } from "./placement.js";
+import { installTwoBitAdder, syncTwoBitAdder } from "./two-bit-adder.js";
 
 const SPACE_LOAD_START_PERCENT = 13;
 const SPACE_LOAD_MID_PERCENT = 66;
@@ -34,15 +35,29 @@ const platformSize = resolvePlatformSize(handoff?.platformSize);
 const world = new World(document.getElementById("game"), platformSize);
 window.world = world;
 let selected = 0;
-let pendingPlacement = handoff?.kind === "place" && Array.isArray(handoff.blocks) && handoff.blocks.length > 0
-  ? handoff.blocks
+let pendingPlacement = null;
+if (handoff?.kind === "place" && Array.isArray(handoff.blocks) && handoff.blocks.length > 0) {
+  placeBlocksAtOrigin(world, handoff.blocks, { x: 0, y: 0, z: 0 });
+}
+const calculatorOffset = Math.min(8, Math.floor(platformSize / 2) - 4);
+const twoBitAdder = platformSize >= 19
+  ? installTwoBitAdder(world, { x: calculatorOffset, y: 1, z: -calculatorOffset })
   : null;
+if (twoBitAdder) syncTwoBitAdder(world, twoBitAdder);
 
 const loadEl = document.getElementById("space-load");
 const loadBar = loadEl?.querySelector("[role=progressbar]");
 const loadFill = loadBar?.querySelector("span");
+const playBtn = document.getElementById("space-play");
 const loadStarted = performance.now();
 const spaceReady = true;
+
+function dismissLoadAndPlay() {
+  loadEl?.remove();
+  world.lock();
+}
+
+playBtn?.addEventListener("click", dismissLoadAndPlay);
 
 function tickLoad() {
   if (!loadEl || !loadBar || !loadFill) return;
@@ -51,7 +66,9 @@ function tickLoad() {
   loadFill.style.width = `${percent}%`;
   loadBar.setAttribute("aria-valuenow", String(percent));
   if (spaceLoadShouldDismiss(elapsed, spaceReady)) {
-    loadEl.remove();
+    loadFill.style.width = "100%";
+    loadBar.setAttribute("aria-valuenow", "100");
+    if (playBtn) playBtn.hidden = false;
     return;
   }
   requestAnimationFrame(tickLoad);
@@ -101,30 +118,49 @@ addEventListener("wheel", (e) => {
 });
 
 const blocker = document.getElementById("blocker");
-blocker.addEventListener("click", () => world.lock());
+let openingInventory = false;
+
+function showPauseMenu() {
+  blocker.classList.add("is-open");
+}
+
+function hidePauseMenu() {
+  blocker.classList.remove("is-open");
+}
+
+blocker.addEventListener("click", (event) => {
+  if (event.target.closest("button")) return;
+  hidePauseMenu();
+  world.lock();
+});
 document.getElementById("game").addEventListener("click", () => world.lock());
 world.controls.addEventListener("lock", () => {
-  blocker.style.display = "none";
+  hidePauseMenu();
   if (pendingPlacement) {
     startPlacement(world, pendingPlacement);
     pendingPlacement = null;
   }
 });
 world.controls.addEventListener("unlock", () => {
-  if (!inventoryOpen()) blocker.style.display = "flex";
+  if (openingInventory || inventoryOpen()) return;
+  showPauseMenu();
 });
 
 addEventListener("mousedown", (e) => {
   if (!world.locked() || isPlacing()) return;
   const pick = world.pickCenter();
   if (!pick) return;
-  if (e.button === 0) {
+  if (e.button === 2) {
     if (pick.hit) world.remove(...pick.hit);
-  } else if (e.button === 2) {
+  } else if (e.button === 0) {
     if (pick.hit) {
       const b = world.blocks.get(pick.hit.join(","));
       if (b) {
-        if (b.id === "lever" || b.id === "button") { world.toggle(...pick.hit); return; }
+        if (b.id === "lever" || b.id === "button") {
+          world.toggle(...pick.hit);
+          if (twoBitAdder) syncTwoBitAdder(world, twoBitAdder);
+          return;
+        }
         const def = BLOCKS[b.id];
         if (def.repeater || def.comparator) {
           if (e.shiftKey && def.comparator) world.toggleMode(...pick.hit);
@@ -138,8 +174,14 @@ addEventListener("mousedown", (e) => {
 });
 addEventListener("contextmenu", (e) => e.preventDefault());
 
-document.getElementById("to-arena").addEventListener("click", () => {
+document.getElementById("to-arena").addEventListener("click", (event) => {
+  event.stopPropagation();
   location.assign("/");
+});
+document.getElementById("switch-mode")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  hidePauseMenu();
+  world.lock();
 });
 
 const overlay = document.getElementById("inventory-overlay");
@@ -151,11 +193,13 @@ function inventoryOpen() {
 function closeInventory() {
   if (!overlay) return;
   overlay.hidden = true;
-  if (!world.locked()) blocker.style.display = "flex";
 }
 
 function openInventory() {
+  openingInventory = true;
   world.unlock();
+  openingInventory = false;
+  hidePauseMenu();
   const list = overlay.querySelector(".inventory-list");
   const empty = overlay.querySelector(".empty-state");
   list.replaceChildren();
@@ -176,13 +220,14 @@ function openInventory() {
       li.append(img, name);
       li.addEventListener("click", () => {
         closeInventory();
-        startPlacement(world, entry.blocks);
+        pendingPlacement = entry.blocks;
+        hidePauseMenu();
+        world.lock();
       });
       list.appendChild(li);
     }
   }
   overlay.hidden = false;
-  blocker.style.display = "none";
 }
 
 function toggleInventory() {
@@ -198,9 +243,21 @@ overlay.querySelector(".inventory-dialog")?.addEventListener("click", (event) =>
 });
 
 addEventListener("keydown", (e) => {
-  if (e.code === "Escape" && inventoryOpen()) {
+  if (e.code === "KeyE") {
+    e.preventDefault();
+    toggleInventory();
+    return;
+  }
+  if (e.code !== "Escape") return;
+  if (inventoryOpen()) {
     e.preventDefault();
     closeInventory();
+    showPauseMenu();
+    return;
+  }
+  if (!world.locked()) {
+    e.preventDefault();
+    showPauseMenu();
   }
 });
 

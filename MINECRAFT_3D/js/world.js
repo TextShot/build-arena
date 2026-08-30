@@ -14,6 +14,7 @@ export class World {
   constructor(canvas, platformSize = 51) {
     this.blocks = new Map();
     this.meshes = new Map();
+    this.displayLampKeys = new Set();
     this.power  = new Map();
     this.particles = [];
     this.onFrame = null;
@@ -209,6 +210,11 @@ export class World {
     this.refresh();
   }
 
+  setPoweredLamps(keys) {
+    this.displayLampKeys = new Set(keys);
+    this.refresh();
+  }
+
   _removeMesh(k) {
     const m = this.meshes.get(k);
     if (m){ this.scene.remove(m); this.meshes.delete(k); }
@@ -239,6 +245,9 @@ export class World {
 
   refresh() {
     this.power = simulate(this);
+    for (const k of this.displayLampKeys) {
+      if (this.blocks.get(k)?.id === "lamp") this.power.set(k, 15);
+    }
     for (const [k, mesh] of this.meshes) {
       const b = this.blocks.get(k); const def = BLOCKS[b.id];
       const p = this.power.get(k) ?? 0;

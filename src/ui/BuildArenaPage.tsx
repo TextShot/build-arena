@@ -19,6 +19,7 @@ import {
   addEntry,
   readInventory,
   removeEntry,
+  toArenaBlocks,
   toRelativeBlocks,
   writeHandoff,
 } from "../storage/inventory";
@@ -266,7 +267,7 @@ export function BuildArenaPage() {
   const goToPlaySpace = (kind: "visit" | "place") => {
     const blocks = engine.snapshotBlocks();
     const handoff = kind === "place" && blocks.length > 0
-      ? { kind: "place" as const, platformSize, buildHeight, blocks: toRelativeBlocks(blocks) }
+      ? { kind: "place" as const, platformSize, buildHeight, blocks: toArenaBlocks(blocks) }
       : { kind: "visit" as const, platformSize, buildHeight };
     const written = writeHandoff(handoff);
     if (!written.ok) {
