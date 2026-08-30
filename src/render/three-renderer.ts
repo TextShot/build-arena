@@ -45,7 +45,7 @@ type LastLeftClick = Readonly<{
   placed: Coordinate;
 }>;
 
-const DOUBLE_CLICK_MS = 280;
+const DOUBLE_CLICK_MS = 800;
 const _normal = new Vector3();
 const _instanceMatrix = new Matrix4();
 

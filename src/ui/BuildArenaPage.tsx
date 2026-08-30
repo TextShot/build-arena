@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ArenaEngine, ArenaResult, Block, BlockEdit, BuildSummary } from "../core/arena-engine";
-import { isBlockId } from "../core/block-types";
-import { coordinateKey, type Coordinate } from "../core/coordinates";
+import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
+import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
+import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
 import { ArenaRenderer } from "../render/three-renderer";
 import { type CameraPreset, type SidebarPanel, useUiStore } from "../state/ui-store";
+import {
+  downloadBlueprintJson,
+  parseBlueprintJson,
+  serializeBlueprintJson,
+} from "../storage/blueprint-json";
 import { BlockPalette } from "./BlockPalette";
 
 type ActivityActor = "you" | "agent";
@@ -171,7 +176,8 @@ export function BuildArenaPage() {
   );
 
   const currentBlocks = engine.queryBlocks({ limit: 500 }).blocks;
-  const blueprintText = JSON.stringify({ revision: summary.revision, blocks: currentBlocks }, null, 2);
+  const blueprint = createBlueprint(currentBlocks, { id: "arena-build", name: "Arena Build" });
+  const blueprintText = serializeBlueprintJson(blueprint);
 
   useEffect(() => {
     if (!jsonMode) {
@@ -220,9 +226,9 @@ export function BuildArenaPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [engine]);
 
-  const exportBlueprint = async () => {
+  const exportBlueprint = () => {
     try {
-      await navigator.clipboard.writeText(blueprintText);
+      downloadBlueprintJson(blueprint);
       addActivity({
         actor: "you",
         name: "export",
@@ -236,14 +242,14 @@ export function BuildArenaPage() {
         name: "export",
         success: false,
         revision: summary.revision,
-        payload: JSON.stringify({ error: error instanceof Error ? error.message : "Clipboard unavailable" }),
+        payload: JSON.stringify({ error: error instanceof Error ? error.message : "Download unavailable" }),
       });
     }
   };
 
   const validateAndApplyJson = () => {
-    const parsed = parseBuildJson(jsonDraft);
-    if (!parsed.ok) {
+    const parsed = parseBlueprintJson(jsonDraft);
+    if (!parsed.success) {
       setJsonError(parsed.error);
       addActivity({
         actor: "you",
@@ -255,7 +261,20 @@ export function BuildArenaPage() {
       return;
     }
     setJsonError(null);
-    const edits = snapshotEdits(currentBlocks, parsed.blocks);
+    const edits = diffBlueprintBlocks(currentBlocks, parsed.blueprint.blocks);
+    const maxBatchEdits = engine.getContext().limits.maxBatchEdits;
+    if (edits.length > maxBatchEdits) {
+      const error = `Blueprint needs ${edits.length} edits; the maximum is ${maxBatchEdits}`;
+      setJsonError(error);
+      addActivity({
+        actor: "you",
+        name: "json.validate",
+        success: false,
+        revision: summary.revision,
+        payload: JSON.stringify({ error }),
+      });
+      return;
+    }
     const result = engine.apply({
       type: "set_blocks",
       expectedRevision: engine.getContext().revision,
@@ -281,7 +300,7 @@ export function BuildArenaPage() {
           <button aria-current="page" type="button">Build Arena</button>
         </nav>
         <div className="topbar-actions">
-          <button className="export-button" onClick={() => void exportBlueprint()} type="button">Export</button>
+          <button className="export-button" onClick={exportBlueprint} type="button">Export</button>
           <button aria-label="Undo" className="icon-button" data-flip="true" onClick={() => applyHistory("undo")} title="Undo" type="button">
             <RedoIcon />
           </button>
@@ -340,7 +359,6 @@ export function BuildArenaPage() {
             <section className="json-editor" aria-labelledby="json-editor-title">
               <div className="json-editor-toolbar">
                 <div>
-                  <p className="panel-kicker">Blueprint</p>
                   <h2 id="json-editor-title">JSON editor</h2>
                 </div>
                 <div className="json-editor-actions">
@@ -533,68 +551,4 @@ function blockAt(engine: ArenaEngine, coordinate: Coordinate) {
     region: { min: coordinate, max: coordinate },
     limit: 1,
   }).blocks[0]?.block ?? null;
-}
-
-function parseBuildJson(text: string): { ok: true; blocks: Block[] } | { ok: false; error: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "JSON is invalid" };
-  }
-  if (typeof parsed !== "object" || parsed === null || !("blocks" in parsed) || !Array.isArray(parsed.blocks)) {
-    return { ok: false, error: "JSON must include a blocks array" };
-  }
-
-  const blocks: Block[] = [];
-  for (const [index, item] of parsed.blocks.entries()) {
-    if (typeof item !== "object" || item === null) {
-      return { ok: false, error: `blocks[${index}] must be an object` };
-    }
-    const position = "position" in item ? item.position : null;
-    const block = "block" in item ? item.block : null;
-    if (
-      typeof position !== "object" ||
-      position === null ||
-      !("x" in position) ||
-      !("y" in position) ||
-      !("z" in position) ||
-      ![position.x, position.y, position.z].every((value) => typeof value === "number")
-    ) {
-      return { ok: false, error: `blocks[${index}].position must be { x, y, z }` };
-    }
-    if (!isBlockId(block)) {
-      return { ok: false, error: `blocks[${index}].block is not a Phase A id` };
-    }
-    blocks.push({
-      position: { x: position.x, y: position.y, z: position.z },
-      block,
-    });
-  }
-  return { ok: true, blocks };
-}
-
-function snapshotEdits(current: readonly Block[], next: readonly Block[]): BlockEdit[] {
-  const currentByKey = new Map(current.map((item) => [coordinateKey(item.position), item.block]));
-  const nextKeys = new Set<string>();
-  const edits: BlockEdit[] = [];
-
-  for (const item of next) {
-    const key = coordinateKey(item.position);
-    nextKeys.add(key);
-    const existing = currentByKey.get(key);
-    if (existing === undefined) {
-      edits.push({ action: "place", position: item.position, block: item.block });
-    } else if (existing !== item.block) {
-      edits.push({ action: "replace", position: item.position, block: item.block });
-    }
-  }
-
-  for (const item of current) {
-    if (!nextKeys.has(coordinateKey(item.position))) {
-      edits.push({ action: "remove", position: item.position });
-    }
-  }
-
-  return edits;
 }

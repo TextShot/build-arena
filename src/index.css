@@ -429,8 +429,21 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
   grid-template-columns: minmax(0, 1fr);
 }
 
-.arena-sidebar { min-width: 0; overflow: hidden; transition: width 150ms ease; }
+.arena-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 150ms ease;
+}
 .arena-sidebar[hidden] { display: none; }
+
+.sidebar-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .arena-sidebar,
 .arena-sidebar * {
@@ -456,17 +469,42 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
 
 .sidebar-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.25rem;
-  padding: 0.55rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  padding: 0.55rem 0.75rem;
   border-bottom: 1px solid var(--border);
 }
 
-.sidebar-tabs button { min-height: 2.25rem; padding: 0.35rem 0.2rem; overflow: hidden; border-color: transparent; background: transparent; font-size: 0.68rem; text-overflow: ellipsis; }
-.sidebar-tabs button[aria-pressed="true"] { border-color: #3c6075; color: #d9f1ff; background: var(--accent-soft); }
+.sidebar-tabs button {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.2rem;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+}
+
+.sidebar-tabs button:hover:not(:disabled),
+.sidebar-tabs button:active:not(:disabled) {
+  border: none;
+  background: transparent;
+  transform: none;
+}
+
+.sidebar-tabs button[aria-pressed="true"] {
+  border: none;
+  color: #d9f1ff;
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
 
 .sidebar-panel {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   max-height: calc(100dvh - 12.3rem);
   min-height: 0;
@@ -501,9 +539,9 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
 }
 
 .activity-list {
-  display: grid;
+  display: flex;
   flex: 1 1 auto;
-  align-content: start;
+  flex-direction: column;
   gap: 0.55rem;
   min-height: 0;
   overflow: auto;
@@ -544,14 +582,88 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
   max-height: none;
 }
 
+.json-editor {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+  padding: 0.75rem 0.85rem;
+}
+
+.json-editor-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.json-editor h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.json-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.json-editor-actions button {
+  min-height: 2.25rem;
+  padding-inline: 0.75rem;
+}
+
+.json-editor textarea {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 0.55rem;
+  color: #b8ddf2;
+  background: rgb(8 16 14 / 52%);
+  font: 0.7rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: none;
+}
+
+.json-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
 .activity-list li {
+  flex: 0 0 auto;
+  min-height: min-content;
   padding: 0.65rem;
-  overflow: hidden;
+  overflow: visible;
   border-left: 3px solid #7ec8a0;
   color: #c0ccd3;
   background: rgb(12 24 20 / 42%);
   font-size: 0.76rem;
   line-height: 1.5;
+}
+
+.activity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+
+.activity-list details {
+  margin-top: 0.35rem;
+}
+
+.activity-list pre {
+  margin: 0.4rem 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (max-width: 980px) {
@@ -575,7 +687,7 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
   .camera-toolbar button { flex: 1; min-width: 0; padding-inline: 0.2rem; }
   .block-palette { width: calc(100% - 1rem); }
   .block-choice { width: 4rem; }
-  .sidebar-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sidebar-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

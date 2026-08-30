@@ -38,7 +38,7 @@ export function validateArenaPosition(
     coordinate.y < config.minY || coordinate.y > config.maxY ||
     coordinate.z < config.minZ || coordinate.z > config.maxZ
   ) {
-    return failure("Position is outside arena bounds", fieldPath);
+    return failure("clicking outside arena", fieldPath);
   }
   if (coordinate.y === config.platformY) {
     return failure("The platform is protected and cannot be edited", fieldPath);

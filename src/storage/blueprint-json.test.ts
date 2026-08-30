@@ -23,7 +23,7 @@ describe("blueprint JSON", () => {
     expect(result.success || result.error).toMatch(/JSON|position|line/i);
   });
 
-  it("rejects duplicate or protected coordinates before engine mutation", () => {
+  it("rejects duplicate, protected, or out-of-bounds coordinates before engine mutation", () => {
     const blueprint = createBlueprint(
       [{ position: { x: 0, y: 1, z: 0 }, block: "stone" }],
       { id: "duplicate", name: "Duplicate" },
@@ -48,6 +48,14 @@ describe("blueprint JSON", () => {
     expect(parseBlueprintJson(JSON.stringify(platform))).toMatchObject({
       success: false,
       fieldPath: "blocks[0].position",
+    });
+
+    const outOfBounds = {
+      ...blueprint,
+      blocks: [{ position: { x: 4, y: 1, z: 0 }, block: "stone" }],
+    };
+    expect(parseBlueprintJson(JSON.stringify(outOfBounds))).toMatchObject({
+      success: false,
     });
   });
 });
