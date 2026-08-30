@@ -1,4 +1,5 @@
 import type { BlockChange } from "./arena-engine";
+import { freezeOccupancy } from "./block-types";
 
 export type HistoryEntry = Readonly<{
   id: string;
@@ -7,8 +8,9 @@ export type HistoryEntry = Readonly<{
 
 function freezeChanges(changes: readonly BlockChange[]): readonly BlockChange[] {
   return Object.freeze(changes.map((change) => Object.freeze({
-    ...change,
     position: Object.freeze({ ...change.position }),
+    before: change.before ? freezeOccupancy(change.before) : null,
+    after: change.after ? freezeOccupancy(change.after) : null,
   })));
 }
 

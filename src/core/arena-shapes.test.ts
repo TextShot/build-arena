@@ -26,10 +26,14 @@ describe("generate_shape", () => {
       objectId: "floor_1",
     });
     expect(engine.getSummary().counts.oak_planks).toBe(25);
+    expect(engine.getSummary().objectGroups).toEqual([
+      { objectId: "floor_1", block: "oak_planks", count: 25 },
+    ]);
 
     const undo = engine.apply({ type: "undo", expectedRevision: 1 });
     expect(undo).toMatchObject({ success: true, revision: 2, affectedBlocks: 25 });
     expect(engine.getSummary().blockCount).toBe(0);
+    expect(engine.getSummary().objectGroups).toEqual([]);
   });
 
   it("builds a hollow box shell only", () => {

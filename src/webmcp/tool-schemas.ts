@@ -72,6 +72,21 @@ const dryRun = {
   description: "When true, validate and report affected blocks/bounds without mutating the arena.",
 } as const;
 
+function requiredFields(fields: readonly string[]) {
+  return fields.map((field) => ({ required: [field] }));
+}
+
+function operationRule(
+  operation: "copy" | "move" | "rotate" | "mirror" | "replace_type",
+  required: readonly string[],
+  forbidden: readonly string[],
+) {
+  return {
+    if: { properties: { operation: { const: operation } } },
+    then: { required: [...required], not: { anyOf: requiredFields(forbidden) } },
+  };
+}
+
 export const ARENA_TOOL_SCHEMAS = Object.freeze({
   get_arena_context: {
     type: "object",
@@ -158,6 +173,16 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
     description: "Fill a floor, wall, filled box, or hollow box atomically. Accepts either structured fields or a compact pattern run-string like oak_planks_1@0,1,0-(x5).",
     additionalProperties: false,
     required: ["expectedRevision"],
+    oneOf: [
+      {
+        required: ["pattern"],
+        not: { anyOf: requiredFields(["shape", "region", "block", "state", "objectId"]) },
+      },
+      {
+        required: ["shape", "region", "block"],
+        not: { required: ["pattern"] },
+      },
+    ],
     properties: {
       expectedRevision,
       pattern: {
@@ -179,6 +204,13 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
     description: "Copy, move, rotate, mirror, or replace block types inside a region atomically. Grouping and state are preserved and reoriented.",
     additionalProperties: false,
     required: ["expectedRevision", "operation", "region"],
+    allOf: [
+      operationRule("copy", ["offset"], ["rotation", "axis", "from", "to"]),
+      operationRule("move", ["offset"], ["rotation", "axis", "from", "to"]),
+      operationRule("rotate", ["rotation"], ["offset", "axis", "from", "to"]),
+      operationRule("mirror", ["axis"], ["offset", "rotation", "from", "to"]),
+      operationRule("replace_type", ["from", "to"], ["offset", "rotation", "axis"]),
+    ],
     properties: {
       expectedRevision,
       operation: { type: "string", enum: ["copy", "move", "rotate", "mirror", "replace_type"], description: "The transform to apply." },

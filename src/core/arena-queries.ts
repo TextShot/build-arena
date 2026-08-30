@@ -1,23 +1,22 @@
 import type { ArenaConfig, Bounds } from "./arena-config";
 import { DEFAULT_QUERY_LIMIT } from "./arena-config";
-import type { BlockQuery, BlockQueryResult, BuildSlice, BuildSummary, SliceQuery, WorldCell } from "./arena-engine";
-import type { Block, BlockCounts, BlockId } from "./block-types";
+import type {
+  BlockChange,
+  BlockQuery,
+  BlockQueryResult,
+  BuildSlice,
+  BuildSummary,
+  ObjectGroup,
+  SliceQuery,
+  WorldCell,
+} from "./arena-engine";
+import { freezeBlock, type Block, type BlockCounts, type BlockId } from "./block-types";
 import { ALL_BLOCK_IDS } from "./block-types";
 import type { Coordinate } from "./coordinates";
 import { validateQuery, validateSlice } from "./validation";
 
 function sortBlocks(a: Block, b: Block): number {
   return a.position.x - b.position.x || a.position.y - b.position.y || a.position.z - b.position.z;
-}
-
-function freezeBlock(position: Coordinate, cell: WorldCell): Block {
-  const block: Record<string, unknown> = {
-    position: Object.freeze({ ...position }),
-    block: cell.block,
-  };
-  if (cell.state) block.state = cell.state;
-  if (cell.objectId) block.objectId = cell.objectId;
-  return Object.freeze(block) as Block;
 }
 
 function inBounds(position: Coordinate, bounds: Bounds): boolean {
@@ -37,25 +36,40 @@ export type QueryWorld = Readonly<{
   entries(): Iterable<{ position: Coordinate; cell: WorldCell }>;
 }>;
 
-export type ObjectGroup = Readonly<{
-  objectId: string;
-  block: BlockId;
-  count: number;
-}>;
+export type ObjectGroupRecord = { block: BlockId; count: number };
 
-/** Groups blocks by persistent objectId for the Layers panel and agent reads. */
-export function collectObjectGroups(blocks: readonly Block[]): readonly ObjectGroup[] {
-  const groups = new Map<string, { block: BlockId; count: number }>();
-  for (const block of blocks) {
-    if (!block.objectId) continue;
-    const group = groups.get(block.objectId);
-    if (group) group.count += 1;
-    else groups.set(block.objectId, { block: block.block, count: 1 });
+/** Applies occupancy deltas to the persistent object-group index. */
+export function applyObjectGroupChanges(
+  index: Map<string, ObjectGroupRecord>,
+  changes: readonly BlockChange[],
+): void {
+  for (const change of changes) {
+    const beforeId = change.before?.objectId;
+    if (beforeId) {
+      const entry = index.get(beforeId);
+      if (entry) {
+        if (entry.count <= 1) index.delete(beforeId);
+        else entry.count -= 1;
+      }
+    }
+    const after = change.after;
+    if (after?.objectId) {
+      const entry = index.get(after.objectId);
+      if (entry) {
+        entry.count += 1;
+        entry.block = after.block;
+      } else {
+        index.set(after.objectId, { block: after.block, count: 1 });
+      }
+    }
   }
+}
+
+export function snapshotObjectGroups(index: ReadonlyMap<string, ObjectGroupRecord>): readonly ObjectGroup[] {
   return Object.freeze(
-    [...groups.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([objectId, group]) => Object.freeze({ objectId, ...group })),
+    [...index.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([objectId, group]) => Object.freeze({ objectId, block: group.block, count: group.count })),
   );
 }
 
@@ -77,25 +91,46 @@ export function queryBlocks(world: QueryWorld, query: BlockQuery, config: ArenaC
   });
 }
 
-export function getSummary(world: QueryWorld, revision: number): BuildSummary {
+export function getSummary(
+  world: QueryWorld,
+  revision: number,
+  objectGroups: readonly ObjectGroup[],
+): BuildSummary {
   const blocks = snapshotBlocks(world);
   const counts = {} as Record<BlockId, number>;
   for (const blockId of ALL_BLOCK_IDS) counts[blockId] = 0;
-  for (const block of blocks) counts[block.block] += 1;
-  const positions = blocks.map((block) => block.position);
-  const occupiedBounds = positions.length === 0 ? null : Object.freeze({
-    min: Object.freeze({
-      x: Math.min(...positions.map((position) => position.x)),
-      y: Math.min(...positions.map((position) => position.y)),
-      z: Math.min(...positions.map((position) => position.z)),
-    }),
-    max: Object.freeze({
-      x: Math.max(...positions.map((position) => position.x)),
-      y: Math.max(...positions.map((position) => position.y)),
-      z: Math.max(...positions.map((position) => position.z)),
-    }),
+  if (blocks.length === 0) {
+    return Object.freeze({
+      revision,
+      blockCount: 0,
+      counts: Object.freeze(counts) as BlockCounts,
+      occupiedBounds: null,
+      objectGroups,
+    });
+  }
+
+  const min = { ...blocks[0].position };
+  const max = { ...blocks[0].position };
+  for (const block of blocks) {
+    counts[block.block] += 1;
+    min.x = Math.min(min.x, block.position.x);
+    min.y = Math.min(min.y, block.position.y);
+    min.z = Math.min(min.z, block.position.z);
+    max.x = Math.max(max.x, block.position.x);
+    max.y = Math.max(max.y, block.position.y);
+    max.z = Math.max(max.z, block.position.z);
+  }
+  const occupiedBounds = Object.freeze({
+    min: Object.freeze(min),
+    max: Object.freeze(max),
   });
-  return Object.freeze({ revision, blockCount: blocks.length, counts: Object.freeze(counts) as BlockCounts, occupiedBounds });
+  return Object.freeze({
+    revision,
+    blockCount: blocks.length,
+    counts: Object.freeze(counts) as BlockCounts,
+    occupiedBounds,
+    objectGroups,
+  });
 }
 
 export function getSlice(world: QueryWorld, query: SliceQuery, config: ArenaConfig, revision: number): BuildSlice {

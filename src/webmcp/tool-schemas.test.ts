@@ -24,11 +24,15 @@ describe("arena tool schemas", () => {
       },
       undo_build_change: { expectedRevision: 1 },
       save_blueprint: {},
-      generate_shape: { expectedRevision: 0 },
+      generate_shape: {
+        expectedRevision: 0,
+        pattern: "oak_planks_1@0,1,0-(x5)",
+      },
       transform_region: {
         expectedRevision: 0,
         operation: "copy",
         region: { min: { x: 0, y: 1, z: 0 }, max: { x: 0, y: 1, z: 0 } },
+        offset: { x: 1, y: 0, z: 0 },
       },
       render_build_views: {},
     };
@@ -53,5 +57,36 @@ describe("arena tool schemas", () => {
     const setBlocks = ARENA_TOOL_SCHEMAS.set_blocks.properties.edits;
     expect(setBlocks.maxItems).toBe(256);
     expect(ARENA_TOOL_SCHEMAS.query_blocks.properties.limit.maximum).toBe(500);
+  });
+
+  it("requires exactly one generate_shape input mode", () => {
+    const validate = ajv.compile(ARENA_TOOL_SCHEMAS.generate_shape);
+    const region = { min: { x: 0, y: 1, z: 0 }, max: { x: 0, y: 1, z: 0 } };
+
+    expect(validate({ expectedRevision: 0 })).toBe(false);
+    expect(validate({ expectedRevision: 0, pattern: "stone_1@0,1,0+(x2)" })).toBe(true);
+    expect(validate({ expectedRevision: 0, shape: "floor", region, block: "stone" })).toBe(true);
+    expect(validate({ expectedRevision: 0, pattern: "stone_1@0,1,0+(x2)", shape: "floor", region, block: "stone" })).toBe(false);
+  });
+
+  it("requires only the fields used by each transform operation", () => {
+    const validate = ajv.compile(ARENA_TOOL_SCHEMAS.transform_region);
+    const base = {
+      expectedRevision: 0,
+      region: { min: { x: 0, y: 1, z: 0 }, max: { x: 0, y: 1, z: 0 } },
+    };
+    const cases = [
+      ["copy", { offset: { x: 1, y: 0, z: 0 } }, { rotation: 90 }],
+      ["move", { offset: { x: 1, y: 0, z: 0 } }, { axis: "x" }],
+      ["rotate", { rotation: 90 }, { offset: { x: 1, y: 0, z: 0 } }],
+      ["mirror", { axis: "x" }, { from: "stone" }],
+      ["replace_type", { from: "stone", to: "dirt" }, { rotation: 90 }],
+    ] as const;
+
+    for (const [operation, required, unrelated] of cases) {
+      expect(validate({ ...base, operation }), `${operation} missing fields`).toBe(false);
+      expect(validate({ ...base, operation, ...required }), `${operation} valid`).toBe(true);
+      expect(validate({ ...base, operation, ...required, ...unrelated }), `${operation} unrelated field`).toBe(false);
+    }
   });
 });

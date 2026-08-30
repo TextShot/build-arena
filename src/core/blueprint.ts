@@ -1,7 +1,8 @@
 import type { BlockEdit } from "./arena-engine";
 import {
+  cellEquals,
+  freezeBlock,
   ALL_BLOCK_IDS,
-  blockStateEquals,
   PHASE_A_BLOCK_IDS,
   type Block,
   type BlockCounts,
@@ -53,23 +54,13 @@ function emptyBlockCounts(): Record<BlockId, number> {
   return Object.fromEntries(ALL_BLOCK_IDS.map((blockId) => [blockId, 0])) as Record<BlockId, number>;
 }
 
-function copyBlock(block: Block): Block {
-  const copy: Record<string, unknown> = {
-    position: Object.freeze({ ...block.position }),
-    block: block.block,
-  };
-  if (block.state) copy.state = Object.freeze({ ...block.state });
-  if (block.objectId) copy.objectId = block.objectId;
-  return Object.freeze(copy) as Block;
-}
-
 function copyBlocks(blocks: readonly Block[]): readonly Block[] {
   const seen = new Set<string>();
   const copies = blocks.map((block) => {
     const key = coordinateKey(block.position);
     if (seen.has(key)) throw new Error(`Duplicate blueprint coordinate: ${key}`);
     seen.add(key);
-    return copyBlock(block);
+    return freezeBlock(block.position, block);
   });
   return Object.freeze(copies.sort(compareBlocks));
 }
@@ -134,7 +125,7 @@ function getBlueprintSize(blocks: readonly Block[]): { x: number; y: number; z: 
 }
 
 function sameBlock(a: Block, b: Block): boolean {
-  return a.block === b.block && blockStateEquals(a.state, b.state) && a.objectId === b.objectId;
+  return cellEquals(a, b);
 }
 
 function editFor(action: "place" | "replace", block: Block): BlockEdit {

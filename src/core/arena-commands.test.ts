@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest";
 
+import { boundsForChanges } from "./arena-commands";
+import type { BlockChange } from "./arena-engine";
 import { createArenaEngine } from "./arena-world";
 
 const position = (x: number, y = 1, z = 0) => ({ x, y, z });
 
 describe("arena commands", () => {
+  it("calculates affected bounds without spreading coordinate arrays", () => {
+    expect(boundsForChanges([])).toBeNull();
+
+    const changes: readonly BlockChange[] = [
+      { position: { x: -50, y: 1, z: 50 }, before: null, after: { block: "stone" } },
+      { position: { x: 0, y: 17, z: 0 }, before: null, after: { block: "dirt" } },
+      { position: { x: 50, y: 31, z: -50 }, before: null, after: { block: "glass" } },
+    ];
+
+    expect(boundsForChanges([changes[1]])).toEqual({
+      min: { x: 0, y: 17, z: 0 },
+      max: { x: 0, y: 17, z: 0 },
+    });
+    expect(boundsForChanges(changes)).toEqual({
+      min: { x: -50, y: 1, z: -50 },
+      max: { x: 50, y: 31, z: 50 },
+    });
+  });
+
   it("commits a batch atomically, increments once, and emits one exact event", () => {
     const engine = createArenaEngine();
     const events: unknown[] = [];
@@ -32,8 +53,8 @@ describe("arena commands", () => {
       commandType: "set_blocks",
       affectedBlocks: 2,
       changes: [
-        { position: position(-1), before: null, after: "glass" },
-        { position: position(1), before: null, after: "stone" },
+        { position: position(-1), before: null, after: { block: "glass" } },
+        { position: position(1), before: null, after: { block: "stone" } },
       ],
     });
   });

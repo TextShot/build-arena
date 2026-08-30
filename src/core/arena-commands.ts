@@ -5,14 +5,15 @@ import type {
   BlockEdit,
   GenerateShapeCommand,
   TransformRegionCommand,
-  WorldCell,
 } from "./arena-engine";
 import type { ArenaConfig, Bounds } from "./arena-config";
 import { DEFAULT_MAX_BATCH_EDITS } from "./arena-config";
-import type { BlockId, BlockState, Facing } from "./block-types";
+import type { BlockId, BlockState, Facing, WorldCell } from "./block-types";
 import {
-  blockStateEquals,
   blockStateKind,
+  cellEquals,
+  freezeCell,
+  freezeOccupancy,
   mirrorFacing,
   normalizeBlockState,
   rotateFacing,
@@ -33,6 +34,8 @@ export type MutableArenaWorld = Readonly<{
   set(position: Coordinate, cell: WorldCell): void;
   remove(position: Coordinate): void;
   entries(): Iterable<{ position: Coordinate; cell: WorldCell }>;
+  /** Block type already stored under this objectId, or null if the group is new. */
+  groupType(objectId: string): BlockId | null;
 }>;
 
 export type CommandExecution = Readonly<{
@@ -48,49 +51,30 @@ function compareChanges(a: BlockChange, b: BlockChange): number {
 
 export function boundsForChanges(changes: readonly BlockChange[]): Bounds | null {
   if (changes.length === 0) return null;
-  const positions = changes.map((change) => change.position);
-  const min = {
-    x: Math.min(...positions.map((position) => position.x)),
-    y: Math.min(...positions.map((position) => position.y)),
-    z: Math.min(...positions.map((position) => position.z)),
-  };
-  const max = {
-    x: Math.max(...positions.map((position) => position.x)),
-    y: Math.max(...positions.map((position) => position.y)),
-    z: Math.max(...positions.map((position) => position.z)),
-  };
+  const min = { ...changes[0].position };
+  const max = { ...changes[0].position };
+  for (let index = 1; index < changes.length; index += 1) {
+    const { position } = changes[index];
+    min.x = Math.min(min.x, position.x);
+    min.y = Math.min(min.y, position.y);
+    min.z = Math.min(min.z, position.z);
+    max.x = Math.max(max.x, position.x);
+    max.y = Math.max(max.y, position.y);
+    max.z = Math.max(max.z, position.z);
+  }
   return Object.freeze({ min: Object.freeze(min), max: Object.freeze(max) });
 }
 
-function cellEquals(a: WorldCell | null, b: WorldCell | null): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return a.block === b.block && blockStateEquals(a.state, b.state) && a.objectId === b.objectId;
-}
-
-/** Builds a frozen change, omitting undefined state/objectId keys for stable equality. */
 function changeFor(position: Coordinate, before: WorldCell | null, after: WorldCell | null): BlockChange {
-  const change: Record<string, unknown> = {
+  return Object.freeze({
     position: Object.freeze({ ...position }),
-    before: before?.block ?? null,
-    after: after?.block ?? null,
-  };
-  if (before?.state) change.beforeState = before.state;
-  if (after?.state) change.afterState = after.state;
-  if (before?.objectId) change.beforeObjectId = before.objectId;
-  if (after?.objectId) change.afterObjectId = after.objectId;
-  return Object.freeze(change) as BlockChange;
+    before: before ? freezeOccupancy(before) : null,
+    after: after ? freezeOccupancy(after) : null,
+  });
 }
 
 function cellFromChange(change: BlockChange, inverse: boolean): WorldCell | null {
-  const block = inverse ? change.before : change.after;
-  if (block === null) return null;
-  const state = inverse ? change.beforeState : change.afterState;
-  const objectId = inverse ? change.beforeObjectId : change.afterObjectId;
-  const cell: Record<string, unknown> = { block };
-  if (state) cell.state = state;
-  if (objectId) cell.objectId = objectId;
-  return Object.freeze(cell) as WorldCell;
+  return inverse ? change.before : change.after;
 }
 
 function success(
@@ -134,18 +118,9 @@ function inverseChanges(changes: readonly BlockChange[]): readonly BlockChange[]
   ));
 }
 
-/** Finds the block type of an existing persistent object group, if any block carries it. */
-function groupBlockType(world: MutableArenaWorld, objectId: string): BlockId | null {
-  for (const { cell } of world.entries()) {
-    if (cell.objectId === objectId) return cell.block;
-  }
-  return null;
-}
-
 /**
  * Reusing an existing group appends only when its block type is compatible.
  * `pendingGroups` covers groups introduced earlier in the same batch.
- * Returns an error message, or null when compatible.
  */
 function checkGroupCompatibility(
   world: MutableArenaWorld,
@@ -153,19 +128,12 @@ function checkGroupCompatibility(
   block: BlockId,
   pendingGroups: Map<string, BlockId>,
 ): string | null {
-  const existing = pendingGroups.get(objectId) ?? groupBlockType(world, objectId);
+  const existing = pendingGroups.get(objectId) ?? world.groupType(objectId);
   if (existing !== null && existing !== block) {
     return `objectId "${objectId}" already groups ${existing} blocks`;
   }
   pendingGroups.set(objectId, block);
   return null;
-}
-
-function buildCell(block: BlockId, state: BlockState | undefined, objectId: string | undefined): WorldCell {
-  const cell: Record<string, unknown> = { block };
-  if (state) cell.state = state;
-  if (objectId) cell.objectId = objectId;
-  return Object.freeze(cell) as WorldCell;
 }
 
 function executeSetBlocks(
@@ -215,7 +183,7 @@ function executeSetBlocks(
         const incompatible = checkGroupCompatibility(world, edit.objectId, edit.block, pendingGroups);
         if (incompatible) return failed(revision, incompatible, `${fieldPath}.objectId`);
       }
-      after = buildCell(edit.block, normalized.ok ? normalized.state : undefined, edit.objectId);
+      after = freezeCell(edit.block, normalized.ok ? normalized.state : undefined, edit.objectId);
     }
     if (edit.action === "place" && before !== null) return failed(revision, "place requires an empty position", fieldPath);
     if (edit.action === "replace" && before === null) return failed(revision, "replace requires an occupied position", fieldPath);
@@ -336,13 +304,13 @@ function executeGenerateShape(
   const objectIdFailure = validateObjectId(command.objectId, "objectId");
   if (objectIdFailure) return failed(revision, objectIdFailure.error, objectIdFailure.fieldPath);
   if (command.objectId) {
-    const existing = groupBlockType(world, command.objectId);
+    const existing = world.groupType(command.objectId);
     if (existing !== null && existing !== command.block) {
       return failed(revision, `objectId "${command.objectId}" already groups ${existing} blocks`, "objectId");
     }
   }
 
-  const after = buildCell(command.block, normalized.ok ? normalized.state : undefined, command.objectId);
+  const after = freezeCell(command.block, normalized.ok ? normalized.state : undefined, command.objectId);
   const changes: BlockChange[] = [];
   for (const position of regionCells(region, command.shape)) {
     const before = world.get(position);
@@ -421,7 +389,7 @@ function executeTransformRegion(
       const target = { x: region.min.x + nx, y: position.y, z: region.min.z + nz };
       const targetFailure = validateArenaPosition(target, config, "rotation");
       if (targetFailure) return failed(revision, "Rotated blocks would leave the arena", "rotation");
-      const rotatedCell = buildCell(
+      const rotatedCell = freezeCell(
         cell.block,
         transformFacing(cell.state, (facing) => rotateFacing(facing, quarterTurns)),
         cell.objectId,
@@ -438,7 +406,7 @@ function executeTransformRegion(
       const target = axis === "x"
         ? { x: region.min.x + (region.max.x - position.x), y: position.y, z: position.z }
         : { x: position.x, y: position.y, z: region.min.z + (region.max.z - position.z) };
-      const mirroredCell = buildCell(
+      const mirroredCell = freezeCell(
         cell.block,
         transformFacing(cell.state, (facing) => mirrorFacing(facing, axis)),
         cell.objectId,
@@ -461,7 +429,7 @@ function executeTransformRegion(
     for (const { position, cell } of sources) {
       if (cell.block !== from) continue;
       const nextState = toKind === "none" ? undefined : cell.state;
-      targets.set(coordinateKey(position), { position, cell: buildCell(to, nextState, cell.objectId) });
+      targets.set(coordinateKey(position), { position, cell: freezeCell(to, nextState, cell.objectId) });
     }
   } else {
     return failed(revision, "operation must be copy, move, rotate, mirror, or replace_type", "operation");

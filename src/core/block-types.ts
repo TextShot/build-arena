@@ -53,13 +53,46 @@ export function blockStateKind(block: BlockId): BlockStateKind {
   return "none";
 }
 
-/** A block in the sparse arena world. State/objectId keys are omitted when absent. */
-export type Block = Readonly<{
-  position: Coordinate;
+/**
+ * Occupancy at one cell: block type plus optional state and group.
+ * Optional keys are omitted when absent so equality stays stable.
+ */
+export type WorldCell = Readonly<{
   block: BlockId;
   state?: BlockState;
   objectId?: string;
 }>;
+
+/** A positioned occupancy. The sparse world stores WorldCell; reads return Block. */
+export type Block = WorldCell & Readonly<{ position: Coordinate }>;
+
+export function freezeCell(
+  block: BlockId,
+  state?: BlockState,
+  objectId?: string,
+): WorldCell {
+  const cell: { block: BlockId; state?: BlockState; objectId?: string } = { block };
+  if (state) cell.state = state;
+  if (objectId) cell.objectId = objectId;
+  return Object.freeze(cell);
+}
+
+export function freezeOccupancy(cell: WorldCell): WorldCell {
+  return freezeCell(cell.block, cell.state, cell.objectId);
+}
+
+export function cellEquals(a: WorldCell | null | undefined, b: WorldCell | null | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.block === b.block && blockStateEquals(a.state, b.state) && a.objectId === b.objectId;
+}
+
+export function freezeBlock(position: Coordinate, occupancy: WorldCell): Block {
+  return Object.freeze({
+    position: Object.freeze({ ...position }),
+    ...freezeOccupancy(occupancy),
+  });
+}
 
 export type BlockCounts = Readonly<Record<BlockId, number>>;
 

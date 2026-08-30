@@ -5,7 +5,6 @@ import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/
 import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
-import { collectObjectGroups } from "../core/arena-queries";
 import { ArenaRenderer } from "../render/three-renderer";
 import { registerArenaTools } from "../webmcp/register-arena-tools";
 import { type CameraPreset, type SidebarPanel, useUiStore } from "../state/ui-store";
@@ -73,19 +72,9 @@ export function BuildArenaPage() {
     setActivity((current) => [next, ...current].slice(0, 40));
   }, []);
 
-  useEffect(() => engine.subscribe((change) => {
+  useEffect(() => engine.subscribe(() => {
     setSummary(engine.getSummary());
-    addActivity({
-      actor: "you",
-      name: change.commandType,
-      success: true,
-      revision: change.revision,
-      payload: JSON.stringify({
-        affectedBlocks: change.affectedBlocks,
-        undoId: change.undoId,
-      }),
-    });
-  }), [addActivity, engine]);
+  }), [engine]);
 
   const inspectCell = useCallback((coordinate: Coordinate) => {
     useUiStore.getState().setSelectedCoordinate(coordinate);
@@ -101,27 +90,17 @@ export function BuildArenaPage() {
       edits: [{ action: "place", position: coordinate, block }],
     });
     setSummary(engine.getSummary());
-    if (result.success) {
-      setStatusMessage(formatCoord(coordinate));
-      if (result.affectedBlocks === 0) {
-        addActivity({
-          actor: "you",
-          name: "place",
-          success: true,
-          revision: result.revision,
-          payload: JSON.stringify({ position: coordinate, block }),
-        });
-      }
-      return;
-    }
-    setStatusMessage(result.error);
     addActivity({
       actor: "you",
       name: "place",
-      success: false,
+      success: result.success,
       revision: result.revision,
-      payload: JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
+      payload: result.success
+        ? JSON.stringify({ position: coordinate, block })
+        : JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
     });
+    if (result.success) setStatusMessage(formatCoord(coordinate));
+    else setStatusMessage(result.error);
   }, [addActivity, engine]);
 
   const removeCell = useCallback((coordinate: Coordinate) => {
@@ -131,27 +110,17 @@ export function BuildArenaPage() {
       edits: [{ action: "remove", position: coordinate }],
     });
     setSummary(engine.getSummary());
-    if (result.success) {
-      setStatusMessage(formatCoord(coordinate));
-      if (result.affectedBlocks === 0) {
-        addActivity({
-          actor: "you",
-          name: "remove",
-          success: true,
-          revision: result.revision,
-          payload: JSON.stringify({ position: coordinate }),
-        });
-      }
-      return;
-    }
-    setStatusMessage(result.error);
     addActivity({
       actor: "you",
       name: "remove",
-      success: false,
+      success: result.success,
       revision: result.revision,
-      payload: JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
+      payload: result.success
+        ? JSON.stringify({ position: coordinate })
+        : JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
     });
+    if (result.success) setStatusMessage(formatCoord(coordinate));
+    else setStatusMessage(result.error);
   }, [addActivity, engine]);
 
   useEffect(() => {
@@ -199,7 +168,7 @@ export function BuildArenaPage() {
     () => engine.snapshotBlocks(),
     [engine, summary.revision],
   );
-  const objectGroups = useMemo(() => collectObjectGroups(currentBlocks), [currentBlocks]);
+  const objectGroups = summary.objectGroups;
   const blueprint = createBlueprint(currentBlocks, { id: "arena-build", name: "Arena Build" });
   const blueprintText = serializeBlueprintJson(blueprint);
 
@@ -212,18 +181,14 @@ export function BuildArenaPage() {
 
   const handleResult = (result: ArenaResult, name: string, payload: string) => {
     setSummary(engine.getSummary());
-    if (result.success) {
-      if (result.affectedBlocks === 0) {
-        addActivity({ actor: "you", name, success: true, revision: result.revision, payload });
-      }
-      return;
-    }
     addActivity({
       actor: "you",
       name,
-      success: false,
+      success: result.success,
       revision: result.revision,
-      payload: JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
+      payload: result.success
+        ? payload
+        : JSON.stringify({ error: result.error, fieldPath: result.fieldPath }),
     });
   };
 
@@ -234,10 +199,8 @@ export function BuildArenaPage() {
 
   const resizePlatform = (nextSize: number) => {
     const result = engine.resizePlatform(nextSize);
-    if (!result.success) {
-      handleResult(result, "platform.resize", JSON.stringify({ size: nextSize }));
-      return;
-    }
+    handleResult(result, "platform.resize", JSON.stringify({ size: nextSize }));
+    if (!result.success) return;
     setPlatformSize(nextSize);
     const selected = useUiStore.getState().selectedCoordinate;
     if (selected && !isInsideArena(selected, engine)) {
@@ -247,10 +210,8 @@ export function BuildArenaPage() {
 
   const resizeHeight = (nextHeight: number) => {
     const result = engine.resizeHeight(nextHeight);
-    if (!result.success) {
-      handleResult(result, "height.resize", JSON.stringify({ height: nextHeight }));
-      return;
-    }
+    handleResult(result, "height.resize", JSON.stringify({ height: nextHeight }));
+    if (!result.success) return;
     setBuildHeight(nextHeight);
     const selected = useUiStore.getState().selectedCoordinate;
     if (selected && !isInsideArena(selected, engine)) {

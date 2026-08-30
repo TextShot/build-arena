@@ -1,8 +1,34 @@
 import { describe, expect, it } from "vitest";
 
+import { createArenaConfig } from "./arena-config";
 import { createArenaEngine } from "./arena-world";
 
 describe("arena queries", () => {
+  it("folds material counts and occupied bounds in one summary pass", () => {
+    const empty = createArenaEngine().getSummary();
+    expect(empty).toMatchObject({ blockCount: 0, occupiedBounds: null });
+
+    const engine = createArenaEngine(createArenaConfig(101, 31));
+    engine.apply({
+      type: "set_blocks",
+      expectedRevision: 0,
+      edits: [
+        { action: "place", position: { x: -50, y: 1, z: 50 }, block: "stone" },
+        { action: "place", position: { x: 0, y: 17, z: 0 }, block: "stone" },
+        { action: "place", position: { x: 50, y: 31, z: -50 }, block: "glass" },
+      ],
+    });
+
+    expect(engine.getSummary()).toMatchObject({
+      blockCount: 3,
+      counts: { stone: 2, glass: 1 },
+      occupiedBounds: {
+        min: { x: -50, y: 1, z: -50 },
+        max: { x: 50, y: 31, z: 50 },
+      },
+    });
+  });
+
   it("sorts blocks by x, then y, then z and paginates deterministically", () => {
     const engine = createArenaEngine();
     engine.apply({

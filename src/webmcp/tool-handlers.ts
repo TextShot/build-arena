@@ -2,7 +2,6 @@ import Ajv, { type ValidateFunction } from "ajv";
 
 import type { ArenaEngine, GenerateShapeCommand } from "../core/arena-engine";
 import { createBlueprint } from "../core/blueprint";
-import { collectObjectGroups } from "../core/arena-queries";
 import { parsePatternDsl } from "../core/pattern-dsl";
 import { ARENA_TOOL_SCHEMAS, type ArenaToolName } from "./tool-schemas";
 import { arenaResultToolResult, errorToolResult, jsonToolResult } from "./tool-results";
@@ -74,13 +73,7 @@ export function createArenaToolHandlers(
       });
     }),
 
-    get_build_summary: run("get_build_summary", () => {
-      const summary = engine.getSummary();
-      return jsonToolResult({
-        ...summary,
-        objectGroups: collectObjectGroups(engine.snapshotBlocks()),
-      });
-    }),
+    get_build_summary: run("get_build_summary", () => jsonToolResult(engine.getSummary())),
 
     query_blocks: run("query_blocks", (args) => jsonToolResult(engine.queryBlocks(args))),
 

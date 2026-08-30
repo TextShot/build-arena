@@ -5,22 +5,15 @@ import {
   DEFAULT_QUERY_LIMIT,
   MAX_QUERY_LIMIT,
 } from "./arena-config";
-import type { Block, BlockCounts, BlockId, BlockState } from "./block-types";
+import type { Block, BlockCounts, BlockId, BlockState, WorldCell } from "./block-types";
 import { ALL_BLOCK_IDS } from "./block-types";
 import type { Coordinate } from "./coordinates";
 
 export { DEFAULT_ARENA_CONFIG } from "./arena-config";
 export { ALL_BLOCK_IDS, PHASE_A_BLOCK_IDS } from "./block-types";
 export type { ArenaConfig, Bounds } from "./arena-config";
-export type { Block, BlockCounts, BlockId, BlockState } from "./block-types";
+export type { Block, BlockCounts, BlockId, BlockState, WorldCell } from "./block-types";
 export type { Coordinate, CoordinateKey } from "./coordinates";
-
-/** The value stored at one occupied world cell. Optional keys are omitted when absent. */
-export type WorldCell = Readonly<{
-  block: BlockId;
-  state?: BlockState;
-  objectId?: string;
-}>;
 
 export type BlockEdit =
   /** Place is valid only when the target is empty. */
@@ -185,23 +178,25 @@ export type ArenaContext = Readonly<{
   limits: ArenaLimits;
 }>;
 
+export type ObjectGroup = Readonly<{
+  objectId: string;
+  block: BlockId;
+  count: number;
+}>;
+
 export type BuildSummary = Readonly<{
   /** Counts and occupied bounds exclude the implicit protected platform. */
   revision: number;
   blockCount: number;
   counts: BlockCounts;
   occupiedBounds: Bounds | null;
+  objectGroups: readonly ObjectGroup[];
 }>;
 
 export type BlockChange = Readonly<{
   position: Coordinate;
-  before: BlockId | null;
-  after: BlockId | null;
-  /** State/objectId snapshots; keys are omitted when the cell had none. */
-  beforeState?: BlockState;
-  afterState?: BlockState;
-  beforeObjectId?: string;
-  afterObjectId?: string;
+  before: WorldCell | null;
+  after: WorldCell | null;
 }>;
 
 export type ArenaChange = Readonly<{

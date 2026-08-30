@@ -1,17 +1,27 @@
 import type { ArenaConfig } from "./arena-config";
 import { createArenaConfig, DEFAULT_ARENA_CONFIG, DEFAULT_MAX_BATCH_EDITS, DEFAULT_QUERY_LIMIT, MAX_QUERY_LIMIT, platformSizeForConfig } from "./arena-config";
 import type { ArenaChange, ArenaContext, ArenaEngine, ArenaResult, BlockQuery, BuildSlice, BuildSummary, SliceQuery, WorldCell } from "./arena-engine";
-import { ALL_BLOCK_IDS } from "./block-types";
+import { ALL_BLOCK_IDS, type BlockId } from "./block-types";
 import { coordinateFromKey, coordinateKey, type Coordinate, type CoordinateKey } from "./coordinates";
 import { executeCommand, type MutableArenaWorld } from "./arena-commands";
 import { HistoryManager } from "./history";
-import { getSlice, getSummary, queryBlocks, snapshotBlocks, type QueryWorld } from "./arena-queries";
+import {
+  applyObjectGroupChanges,
+  getSlice,
+  getSummary,
+  queryBlocks,
+  snapshotBlocks,
+  snapshotObjectGroups,
+  type ObjectGroupRecord,
+  type QueryWorld,
+} from "./arena-queries";
 
 type SparseArenaWorld = MutableArenaWorld & QueryWorld;
 
 export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CONFIG): ArenaEngine {
   let config: ArenaConfig = initialConfig;
   const blocks = new Map<CoordinateKey, WorldCell>();
+  const groups = new Map<string, ObjectGroupRecord>();
   let revision = 0;
   const history = new HistoryManager();
   const listeners = new Set<(change: ArenaChange) => void>();
@@ -31,6 +41,9 @@ export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CON
         position: coordinateFromKey(key),
         cell,
       }));
+    },
+    groupType(objectId: string): BlockId | null {
+      return groups.get(objectId)?.block ?? null;
     },
   };
 
@@ -107,6 +120,7 @@ export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CON
       if (execution.affectedBounds === null || execution.undoId === null) {
         throw new Error("Committed arena changes require bounds and an undo id");
       }
+      applyObjectGroupChanges(groups, execution.changes);
       revision = execution.result.revision;
       const event: ArenaChange = Object.freeze({
         revision,
@@ -172,7 +186,7 @@ export function createArenaEngine(initialConfig: ArenaConfig = DEFAULT_ARENA_CON
       });
     },
     getSummary(): BuildSummary {
-      return getSummary(world, revision);
+      return getSummary(world, revision, snapshotObjectGroups(groups));
     },
     snapshotBlocks() {
       return snapshotBlocks(world);

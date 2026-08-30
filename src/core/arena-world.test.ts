@@ -21,6 +21,7 @@ describe("arena world", () => {
       revision: 0,
       blockCount: 0,
       occupiedBounds: null,
+      objectGroups: [],
       counts: {
         dirt: 0,
         stone: 0,
