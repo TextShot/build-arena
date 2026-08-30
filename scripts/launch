@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PORT="${VERIFY_BUILD_ARENA_PORT:-4173}"
+HOST="${VERIFY_BUILD_ARENA_HOST:-127.0.0.1}"
+PIDFILE="${VERIFY_BUILD_ARENA_PIDFILE:-/tmp/verify-build-arena.pid}"
+LOGFILE="${VERIFY_BUILD_ARENA_LOGFILE:-/tmp/verify-build-arena.log}"
+URL="http://${HOST}:${PORT}/"
+
+if [[ -f "$PIDFILE" ]]; then
+  old="$(tr -d '[:space:]' <"$PIDFILE")"
+  if kill -0 "$old" 2>/dev/null; then
+    echo "verify-build-arena already running pid=$old url=$URL"
+    exit 0
+  fi
+  rm -f "$PIDFILE"
+fi
+
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "port $PORT is already in use by another process; refuse to hijack it" >&2
+  exit 1
+fi
+
+cd "$ROOT"
+VITE="$ROOT/node_modules/.bin/vite"
+[[ -x "$VITE" ]] || { echo "missing $VITE — run npm install" >&2; exit 1; }
+: >"$LOGFILE"
+# Detach from this shell's process group. Cursor kills the command group when
+# the helper exits; a session-leader Vite is the one Doctor can still see.
+python3 - "$VITE" "$HOST" "$PORT" "$LOGFILE" "$PIDFILE" <<'PY'
+import os, subprocess, sys
+vite, host, port, logfile, pidfile = sys.argv[1:]
+with open(logfile, "ab") as log:
+    proc = subprocess.Popen(
+        [vite, "--host", host, "--port", port, "--strictPort"],
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+        cwd=os.getcwd(),
+    )
+with open(pidfile, "w", encoding="ascii") as handle:
+    handle.write(f"{proc.pid}\n")
+PY
+
+for _ in $(seq 1 50); do
+  if curl -sf "$URL" | grep -q "<title>Build Arena</title>"; then
+    echo "verify-build-arena ready pid=$(cat "$PIDFILE") url=$URL"
+    exit 0
+  fi
+  sleep 0.2
+done
+
+echo "verify-build-arena did not become ready; see $LOGFILE" >&2
+exit 1

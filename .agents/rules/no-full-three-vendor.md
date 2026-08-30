@@ -1,0 +1,26 @@
+---
+description: Never dump MINECRAFT_3D/vendor/three.module.js in full — grep then read small chunks
+alwaysApply: true
+---
+
+# Do not read vendor Three.js in full
+
+`MINECRAFT_3D/vendor/three.module.js` is a vendored Three.js bundle (~1.2MB, ~53k lines). Never open or read the whole file.
+
+If you must inspect it:
+
+1. Grep for the symbol or string you need
+2. Read only a chunk (`offset` + `limit`, roughly 80–200 lines)
+3. Stop. Do not page through the rest "to understand Three.js"
+
+Prefer project code (`src/render/`, app wrappers) and Three.js docs/types over this bundle.
+
+`MINECRAFT_3D/vendor/PointerLockControls.js` is small — reading it in full is fine.
+
+```text
+# ❌ BAD
+Read MINECRAFT_3D/vendor/three.module.js
+
+# ✅ GOOD
+Grep "class Mesh" in that file, then Read offset=… limit=120
+```

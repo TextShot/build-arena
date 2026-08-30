@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PORT="${VERIFY_BUILD_ARENA_PORT:-4173}"
+HOST="${VERIFY_BUILD_ARENA_HOST:-127.0.0.1}"
+PIDFILE="${VERIFY_BUILD_ARENA_PIDFILE:-/tmp/verify-build-arena.pid}"
+URL="http://${HOST}:${PORT}/"
+
+fail() {
+  echo "doctor: $1" >&2
+  exit 1
+}
+
+[[ -f "$PIDFILE" ]] || fail "missing pidfile $PIDFILE (do not drive an unmanaged server)"
+pid="$(tr -d '[:space:]' <"$PIDFILE")"
+kill -0 "$pid" 2>/dev/null || fail "pid $pid from $PIDFILE is not running"
+
+if command -v lsof >/dev/null 2>&1; then
+  lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | grep -qE "[[:space:]]$pid[[:space:]]" \
+    || fail "pid $pid does not own TCP listen on $PORT"
+fi
+
+body="$(curl -sf "$URL" || fail "GET $URL failed")"
+echo "$body" | grep -q "<title>Build Arena</title>" || fail "GET $URL is not Build Arena"
+
+echo "doctor ok pid=$pid url=$URL"
