@@ -33,10 +33,24 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
         env:
           GITHUB_PAGES: "true"
+
+      - name: Install smoke-test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Stage GitHub Pages path
+        run: |
+          mkdir -p /tmp/build-arena-pages-smoke/build-arena
+          cp -R dist/. /tmp/build-arena-pages-smoke/build-arena/
+
+      - name: Browser smoke test
+        run: npx playwright test
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -26,15 +26,17 @@ export function originFromPick(pick) {
 
 export function placeBlocksAtOrigin(world, blocks, origin) {
   let applied = 0;
+  let skipped = 0;
   for (const block of blocks) {
     const c = worldCoord(block, origin);
     if (Math.abs(c.x) > world.radius || Math.abs(c.z) > world.radius || c.y < 0 || c.y > MAX_BUILD_HEIGHT) {
+      skipped++;
       continue;
     }
-    world.place(c.x, c.y, c.z, block.block, arenaBlockToPlaceOpts(block));
-    applied++;
+    if (world.place(c.x, c.y, c.z, block.block, arenaBlockToPlaceOpts(block)) === true) applied++;
+    else skipped++;
   }
-  return { applied };
+  return { applied, skipped };
 }
 
 export function commitPlacement(
@@ -48,8 +50,8 @@ export function commitPlacement(
   }
   const pick = world.pickCenter();
   if (!pick) return { status: "no-target" };
-  const { applied } = placeBlocksAtOrigin(world, blocks, originFromPick(pick));
-  return { status: "applied", applied };
+  const { applied, skipped } = placeBlocksAtOrigin(world, blocks, originFromPick(pick));
+  return { status: "applied", applied, skipped };
 }
 
 let activeSession = null;

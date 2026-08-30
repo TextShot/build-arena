@@ -23,7 +23,7 @@ let cachedValidators: Map<ArenaToolName, ValidateFunction> | undefined;
 
 function getValidators(): Map<ArenaToolName, ValidateFunction> {
   if (cachedValidators) return cachedValidators;
-  const ajv = new Ajv({ allErrors: true, strict: true });
+  const ajv = new Ajv({ allErrors: true, strict: false });
   const validators = new Map<ArenaToolName, ValidateFunction>();
   for (const [name, schema] of Object.entries(ARENA_TOOL_SCHEMAS)) {
     validators.set(name as ArenaToolName, ajv.compile(schema));

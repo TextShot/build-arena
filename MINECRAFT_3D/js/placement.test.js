@@ -9,6 +9,7 @@ function createWorld() {
     pickCenter: () => ({ placeAt: [2, 0, 3] }),
     place(x, y, z, id) {
       this.blocks.set(`${x},${y},${z}`, { id });
+      return true;
     },
   };
 }
@@ -33,7 +34,26 @@ describe("commitPlacement", () => {
 
     const result = commitPlacement(world, [{ x: 0, y: 1, z: 0, block: "stone" }]);
 
-    expect(result).toEqual({ status: "applied", applied: 1 });
+    expect(result).toEqual({ status: "applied", applied: 1, skipped: 0 });
     expect(world.blocks.get("2,0,3")).toEqual({ id: "stone" });
+  });
+
+  it("reports rejected and out-of-bounds inventory blocks as skipped", () => {
+    const world = createWorld();
+    const originalPlace = world.place;
+    world.place = function place(x, y, z, id) {
+      if (id === "glass") return false;
+      if (id === "dirt") return 1;
+      return originalPlace.call(this, x, y, z, id);
+    };
+
+    const result = commitPlacement(world, [
+      { x: 0, y: 1, z: 0, block: "stone" },
+      { x: 1, y: 1, z: 0, block: "glass" },
+      { x: 2, y: 1, z: 0, block: "dirt" },
+      { x: 20, y: 1, z: 0, block: "stone" },
+    ]);
+
+    expect(result).toEqual({ status: "applied", applied: 1, skipped: 3 });
   });
 });

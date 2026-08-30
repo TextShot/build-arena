@@ -69,6 +69,7 @@ export function BuildArenaPage() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [spaceReady, setSpaceReady] = useState(false);
+  const [rendererError, setRendererError] = useState<string | null>(null);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [controlsHelpOpen, setControlsHelpOpen] = useState(false);
   const [musicMuted, setMusicMuted] = useState(() => isThemeMusicMuted());
@@ -169,21 +170,33 @@ export function BuildArenaPage() {
   useEffect(() => {
     const host = rendererHost.current;
     if (!host) return;
-    const arenaRenderer = new ArenaRenderer(host, engine, {
-      // Agent / WebMCP stubs. Clicks use onPlace / onRemove / onSelect.
-      onEdit: (coordinate) => placeCell(coordinate),
-      onInspect: (coordinate) => inspectCell(coordinate),
-      onPlace: (coordinate) => placeCell(coordinate),
-      onRemove: (coordinate) => removeCell(coordinate),
-      onSelect: (coordinate) => inspectCell(coordinate),
-      onFirstFrame: () => setSpaceReady(true),
-    });
-    rendererInstance.current = arenaRenderer;
-    arenaRenderer.setCameraPreset(useUiStore.getState().cameraPreset);
-    arenaRenderer.setSelectedCoordinate(useUiStore.getState().selectedCoordinate);
+    let arenaRenderer: ArenaRenderer | null = null;
+    try {
+      arenaRenderer = new ArenaRenderer(host, engine, {
+        // Agent / WebMCP stubs. Clicks use onPlace / onRemove / onSelect.
+        onEdit: (coordinate) => placeCell(coordinate),
+        onInspect: (coordinate) => inspectCell(coordinate),
+        onPlace: (coordinate) => placeCell(coordinate),
+        onRemove: (coordinate) => removeCell(coordinate),
+        onSelect: (coordinate) => inspectCell(coordinate),
+        onFirstFrame: () => setSpaceReady(true),
+      });
+      rendererInstance.current = arenaRenderer;
+      arenaRenderer.setCameraPreset(useUiStore.getState().cameraPreset);
+      arenaRenderer.setSelectedCoordinate(useUiStore.getState().selectedCoordinate);
+    } catch (error) {
+      console.error("Build Arena WebGL initialization failed.", error);
+      rendererInstance.current = null;
+      arenaRenderer?.dispose();
+      setRendererError("3D graphics could not start. Enable hardware acceleration or try Chrome.");
+      setSpaceReady(true);
+      return;
+    }
+    const mountedRenderer = arenaRenderer;
+    if (!mountedRenderer) return;
     return () => {
       rendererInstance.current = null;
-      arenaRenderer.dispose();
+      mountedRenderer.dispose();
     };
   }, [engine]);
 
@@ -440,7 +453,7 @@ export function BuildArenaPage() {
 
   return (
     <div className="arena-app-shell">
-      <SpaceLoadOverlay spaceReady={spaceReady} />
+      <SpaceLoadOverlay spaceReady={spaceReady || rendererError !== null} />
       <a className="skip-link" href="#arena-workspace">Skip to Build Arena</a>
       <h1 className="sr-only">Build Arena</h1>
 
@@ -572,6 +585,7 @@ export function BuildArenaPage() {
             ))}
           </div>
           <div className="renderer-host" ref={rendererHost} />
+          {rendererError ? <div className="renderer-error" role="alert">{rendererError}</div> : null}
           <div className="viewport-chrome">
             <div className="viewport-status" hidden={!statusMessage} role="status" aria-live="polite">
               {statusMessage ? <strong>{statusMessage}</strong> : null}

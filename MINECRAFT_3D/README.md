@@ -1,154 +1,132 @@
-# Redstone World
-     |
-     +-- landscape (walk, place cubes)     
-     |
-     +-- redstone computer parts           --> LimeStone rules + redstone-world list
-     |
-     +-- pictures / sounds                
+# Redstone World · Play Space
 
-A web-based (Three.js) recreation of Minecraft's **redstone sandbox**: first-person exploration, pixel block textures, realistic redstone signal simulation, and the classic chat box repurposed as an **AI dialogue** window — describe circuits in natural language and the AI, constrained by a sandbox, **can only place redstone blocks**.
+The Play Space is the first-person Three.js side of Build Arena. Build in the visual Arena, save or hand off the build, then open it here to walk through it and use the redstone simulation.
 
-**▶ Play online: https://maoxin1234.github.io/redstone-world/**
+Build Arena and the Play Space share browser Inventory and handoff data. Build Arena's redstone blocks are visual-only; signal simulation runs only in the Play Space.
 
-![overview](docs/img/screenshot-overview.png)
+## Run locally
 
-| Redstone blocks | NAND circuit |
-|:---:|:---:|
-| ![blocks](docs/img/screenshot-blocks.png) | ![nand](docs/img/screenshot-nand.png) |
+Run the Vite project from the repository root:
 
----
+```bash
+npm install
+npm run dev
+```
 
-## Quick Start
+- Build Arena: `http://localhost:5173/`
+- Play Space: `http://localhost:5173/MINECRAFT_3D/index.html`
 
-You need **Python** (recommended) or **Node.js** installed locally.
+Do not open `index.html` directly. Vite resolves the module graph, block textures, shared assets, and deployment base path.
 
-- **Windows**: double-click [`start.bat`](start.bat)
-- **PowerShell**: `./start.ps1`
-- **macOS / Linux**: `./start.sh`
+## GitHub Pages
 
-The script starts a local server ([`server.py`](server.py), with no-cache headers) and opens your browser to `http://localhost:8000`.
-Close the terminal window to stop the server.
+The Pages workflow builds both Vite entry points:
 
-> Do not open `index.html` directly: the project uses ES Modules + local textures and must be served over HTTP.
+- Build Arena: `https://<owner>.github.io/<repo>/`
+- Play Space: `https://<owner>.github.io/<repo>/MINECRAFT_3D/index.html`
 
----
+CI sets `GITHUB_PAGES=true`; `vite.config.ts` derives the project-site base from `GITHUB_REPOSITORY`.
 
 ## Controls
 
 | Action | Input |
-|------|------|
-| Enter world / lock mouse | Click the screen |
+|---|---|
+| Enter the world / capture mouse | Click the screen |
 | Move | `W` `A` `S` `D` |
 | Ascend / descend | `Space` / `Left Shift` |
-| Look around | Move mouse |
-| Break block | Left click |
-| Place block | Right click |
-| Interact with lever/button | Right click |
-| Rotate repeater/comparator facing | Right click |
-| Toggle comparator compare/subtract mode | `Shift` + right click |
-| Select block | Number keys `1`–`9` or scroll wheel |
-| Open AI chat | `T` or `/` |
-| Release mouse / close chat | `Esc` |
+| Look | Mouse with Pointer Lock; arrows in fallback mode |
+| Fallback drag look | `Alt` + left drag |
+| Place selected block | Left click empty space |
+| Remove targeted block | Right click |
+| Use lever or button | Left click |
+| Rotate repeater/comparator | Left click |
+| Change comparator mode | `Shift` + left click |
+| Select hotbar slots | `1`–`9`, `0`, or mouse wheel |
+| Select Oak Sign | `B` |
+| Open Inventory | `E` or hotbar `⋯` |
+| Pause / cancel | `Esc` |
+| Undo / redo | `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` |
+| Toggle Build Lock | `L` |
+| Mute / unmute music | `M` |
 
----
+When Pointer Lock is unavailable, the world activates fallback controls and shows an instruction to use arrow keys or switch to Chrome.
 
-## Block List (10 types)
+## Build Lock
 
-| id | Name | Role |
-|----|------|------|
-| `stone` | Stone | Solid block, can be powered and conduct signal |
-| `redstone_wire` | Redstone Dust | Ground wire, strength 0–15, decays 1 per block |
-| `redstone_torch` | Redstone Torch | Signal source, normally 15; **turns off when block below is powered** (NOT gate core) |
-| `redstone_block` | Redstone Block | Constant signal source, always 15 |
-| `lever` | Lever | Manual switch (right click to toggle) |
-| `button` | Button | Pulse output, auto-off after ~1 second |
-| `repeater` | Repeater | **Has facing**; rear input → front boosted to 15 (boost/diode) |
-| `comparator` | Comparator | **Has facing**; compare: pass if rear ≥ sides else 0; subtract: rear − side |
-| `lamp` | Redstone Lamp | Lights when signal ≥ 1 |
-| `piston` | Piston | Solid decorative block (push not yet implemented) |
+`L` protects the structure from accidental manual edits. While locked, manual placement, removal, device rotation, comparator-mode changes, Inventory placement, undo, and redo are blocked. Movement, camera controls, UI, levers, buttons, and Sign editing remain available. Play Space WebMCP tools are not gated by this manual lock.
 
-See [`RULES.md`](RULES.md) for redstone mechanics (also used as the AI rulebook).
+Build Arena has a separate WebMCP manual-edit lock for coordinating Arena tool writes.
 
----
+## Oak Signs
 
-## AI Chat and Agent
+Press `B` to select the Oak Sign. Placing a Sign opens its editor; clicking an existing Sign reopens it whether Build Lock is on or off.
 
-Press `T` to open chat and tell the AI what to build, for example:
+- Front text only
+- Up to 18 columns across four wrapped lines
+- `Done` saves
+- `Esc` cancels
 
-- "Build a switch-controlled lamp"
-- "Build a NOT gate / NAND gate"
-- "Use a repeater to boost signal"
-- "Build a subtract circuit with a comparator"
+Agent plans cannot place Oak Signs; Signs remain a player-facing interaction.
 
-**Two modes:**
-- **Local mode (default)**: built-in rule engine, works offline, recognizes common circuit keywords.
-- **Claude API**: click ⚙️ top-right, enter Anthropic API Key (default model `claude-opus-4-8`) for arbitrary natural language, `facing`/`mode` support, and **self-correction** on errors. Key stays in browser memory only; refresh clears it.
+## Inventory and handoff
 
-**Agent sandbox** ([`agent.js`](js/agent.js)) is the world's only write path, ensuring AI "can only build redstone":
-- Block ids must be on the whitelist or are rejected;
-- Coordinates limited to ±32, max 200 actions per plan;
-- AI may only output `place` / `remove` — nothing else;
-- Validation errors are sent back to the AI for correction.
+Build Arena stores up to 20 saved builds in browser `localStorage`. Entries retain blocks, block states, dimensions, and thumbnails.
 
----
+`Open in 3D World` writes a one-shot handoff and navigates to the Play Space. The Play Space reads and clears that handoff. Choosing an Inventory build shows a placement preview; left click commits it and `Esc` cancels.
 
-## Project Structure
+## WebMCP
 
+Tools register only when the browser host provides `document.modelContext.registerTool`. No API key or chat window is used.
+
+Play Space tools:
+
+- `get_world_state`
+- `run_build_plan`
+- `clear_world`
+- `place_blueprint_from_inventory`
+
+`run_build_plan` validates up to 200 immediate `place` / `remove` actions with bounded integer coordinates and returns `{ ok, applied, errors }`. `clear_world` removes placed blocks but preserves terrain. `place_blueprint_from_inventory` takes an Inventory id and integer origin and may return partial `{ ok, applied, skipped }` results.
+
+The agent prompt is redstone-focused, while the runtime sandbox allows only whitelisted block ids and bounded `place` / `remove` operations. The Build Arena route exposes its own revisioned query, lock, shape, transform, block-edit, undo, and camera-view tools; Arena mutations require its separate revision-aware manual lock.
+
+Recommended Arena flow:
+
+```text
+lock → context → summary → query/slice → write → re-read → unlock
 ```
-.
-├── index.html            # Entry page
-├── style.css             # UI styles (crosshair/hotbar/chat)
-├── server.py             # Local dev server (no cache)
-├── start.bat/.ps1/.sh    # One-click launch scripts
-├── RULES.md              # Redstone rulebook (also AI system knowledge)
+
+## Redstone scope
+
+This is a focused simulation, not full vanilla Minecraft.
+
+- Active sources output signal strength 15; levers and buttons can be off, and torches extinguish when their support block is powered.
+- Lever state persists; buttons pulse for about one second.
+- Redstone wire loses one signal level per block.
+- Torches invert power from their support block.
+- Repeaters are directional and boost output to 15.
+- Comparators support compare and subtract modes.
+- Lamps react to simulated power.
+- Solid blocks participate in the simplified propagation model.
+- Piston pushing and extension are not implemented.
+
+## Project structure
+
+```text
+MINECRAFT_3D/
+├── index.html          # Play Space entry and static startup recovery UI
+├── style.css           # HUD, menus, loading, and Sign editor
 ├── js/
-│   ├── main.js           # Entry: UI, input, wires modules together
-│   ├── world.js          # First-person 3D world: terrain/render/interaction/redstone
-│   ├── blocks.js         # Block definitions + redstone simulation (facing, fixed-point)
-│   ├── textures.js       # Load/generate block materials and hotbar icons
-│   ├── agent.js          # Agent sandbox: validate and execute AI JSON plans
-│   └── ai.js             # Chat AI: Claude API + local fallback + system prompt
-├── assets/               # Block texture PNGs (procedural + extracted from renders)
-├── source_renders/       # Original Minecraft Wiki isometric renders (texture source)
-├── tools/
-│   ├── generate_textures.py  # Procedurally generate pixel texture PNGs
-│   └── extract_faces.py      # Extract flat faces from isometric renders
-└── vendor/               # Three.js + PointerLockControls (local copy, offline-ready)
+│   ├── main.js         # UI, input, Inventory, history, tool registration
+│   ├── world.js        # Three.js world, interaction, redstone visuals
+│   ├── blocks.js       # Block catalogue and signal simulation
+│   ├── textures.js     # Vite-managed textures and hotbar icons
+│   ├── placement.js    # Inventory placement preview and commit
+│   ├── edit-history.js # Session undo/redo and conflict checks
+│   ├── inventory.js    # Shared Inventory/handoff reads
+│   └── ai.js           # Play Space WebMCP tools
+└── vendor/             # Local Three.js r160 and PointerLockControls
 ```
 
----
+## Credits and license
 
-## Redstone Simulation
-
-`simulate()` ([blocks.js](js/blocks.js)) uses **fixed-point iteration** because torch, repeater, and comparator outputs depend on each other:
-
-1. Signal sources (torch/block/lever/button) inject 15 into adjacent components.
-2. Redstone dust/solid blocks propagate via BFS, −1 per block, stops at 0.
-3. Redstone torch: turns off when support block below is powered (natural inverter).
-4. Repeater/comparator use `facing`: **rear** is input, **front** is output — directional endpoints, not penetrated from the wrong side.
-5. Iterate until all component states stabilize.
-
----
-
-## Custom Textures
-
-To swap in your own resource pack:
-
-- **Full blocks** (stone, redstone block, lamp, piston, etc.): overwrite the matching **flat 16×16 PNG** in `assets/` (see directory for filenames), then refresh.
-- Only have Minecraft Wiki **isometric renders**? Put them in `source_renders/` and run `python tools/extract_faces.py` to extract flat faces.
-- Regenerate built-in procedural textures: `python tools/generate_textures.py` (⚠️ overwrites matching files in `assets/`).
-
----
-
-## Tech Stack
-
-- **Three.js** r160 (3D rendering, local copy in `vendor/`)
-- **PointerLockControls** (first-person camera)
-- Native ES Modules, no bundler required
-- **Pillow** (offline texture generation only)
-- Optional **Anthropic Claude API** (natural language building)
-
-## License
-
-Code is open source under the [MIT License](LICENSE).
-Block renders in `source_renders/` are from Minecraft Wiki; copyright belongs to Mojang/Microsoft and contributors, for educational use only — not covered by the MIT license. This project is a non-commercial technical recreation demo.
+The first-person world began from [maoxin1234/redstone-world](https://github.com/maoxin1234/redstone-world) under MIT. Music is ansimuz, “Going Up”; see `public/public-license.txt`. See [`LICENSE`](LICENSE). Repository-level credits and third-party asset licenses are documented in the root README and public license files.

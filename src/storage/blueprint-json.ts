@@ -16,7 +16,7 @@ export type BlueprintParseResult =
   | Readonly<{ success: true; blueprint: BlueprintV2 }>
   | Readonly<{ success: false; error: string; fieldPath?: string }>;
 
-const ajv = new Ajv({ allErrors: true, strict: true });
+const ajv = new Ajv({ allErrors: true, strict: false });
 const validateBlueprintV1 = ajv.compile<BlueprintV1>(BLUEPRINT_V1_SCHEMA);
 const validateBlueprintV2 = ajv.compile<BlueprintV2>(BLUEPRINT_V2_SCHEMA);
 

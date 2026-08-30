@@ -28,7 +28,14 @@ export class World {
     this.scene.background = new THREE.Color(0x8cc5ff);
     this.scene.fog = new THREE.Fog(0x8cc5ff, 40, 110);
     this.camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    try {
+      this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    } catch (error) {
+      console.error('Play Space WebGL initialization failed.', error);
+      const startupError = new Error('Play Space WebGL initialization failed.', { cause: error });
+      startupError.name = 'WebGLInitializationError';
+      throw startupError;
+    }
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.setPixelRatio(devicePixelRatio);
 

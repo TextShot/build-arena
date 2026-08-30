@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { boundsForChanges } from "./arena-commands";
+import { createArenaConfig } from "./arena-config";
 import type { BlockChange } from "./arena-engine";
 import { createArenaEngine } from "./arena-world";
 
@@ -256,7 +257,7 @@ describe("arena commands", () => {
   });
 
   it("replaces the complete build above the set_blocks limit in one undoable entry", () => {
-    const engine = createArenaEngine();
+    const engine = createArenaEngine(createArenaConfig(51));
     engine.apply({
       type: "set_blocks",
       expectedRevision: 0,

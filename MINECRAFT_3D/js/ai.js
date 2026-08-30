@@ -100,7 +100,7 @@ function describeTool(name, schemas) {
   return schemas[name].description ?? name;
 }
 
-export async function registerPlaySpaceTools(world, { signal, modelContext } = {}) {
+export async function registerPlaySpaceTools(world, { signal, modelContext, onRegistrationError } = {}) {
   const ctx = modelContext ??
     (typeof document !== "undefined" ? document.modelContext : undefined);
   if (!ctx || typeof ctx.registerTool !== "function" || signal?.aborted) {
@@ -128,13 +128,20 @@ export async function registerPlaySpaceTools(world, { signal, modelContext } = {
       if (!origin || !Number.isInteger(origin.x) || !Number.isInteger(origin.y) || !Number.isInteger(origin.z)) {
         return { ok: false, error: "origin must be integer {x,y,z}" };
       }
-      const { applied } = placeBlocksAtOrigin(world, entry.blocks, origin);
-      return { ok: true, applied };
+      const { applied, skipped } = placeBlocksAtOrigin(world, entry.blocks, origin);
+      return { ok: skipped === 0, applied, skipped };
     },
   };
 
+  const registrationController = new AbortController();
+  const abortRegistrations = () => registrationController.abort(signal?.reason);
+  signal?.addEventListener("abort", abortRegistrations, { once: true });
+
   try {
     for (const name of names) {
+      if (registrationController.signal.aborted) {
+        throw registrationController.signal.reason ?? new Error("Tool registration aborted");
+      }
       await ctx.registerTool(
         {
           name,
@@ -143,11 +150,15 @@ export async function registerPlaySpaceTools(world, { signal, modelContext } = {
           annotations: { readOnlyHint: name === "get_world_state" },
           execute: (args) => handlers[name](args),
         },
-        signal ? { signal } : undefined,
+        { signal: registrationController.signal },
       );
     }
     return true;
-  } catch {
+  } catch (error) {
+    registrationController.abort(error);
+    signal?.removeEventListener("abort", abortRegistrations);
+    console.error("Play Space tool registration failed.", error);
+    onRegistrationError?.(error);
     return false;
   }
 }

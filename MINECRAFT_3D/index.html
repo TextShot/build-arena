@@ -7,10 +7,47 @@
 <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="%BASE_URL%favicon-16.png">
+<style>
+  #startup-recovery { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1.5rem; visibility: hidden; color: #f4efe4; background: #18251f; font: 16px/1.6 system-ui, sans-serif; text-align: center; animation: reveal-startup-recovery 0s 4s forwards; }
+  #startup-recovery[hidden] { display: none; }
+  #startup-recovery[data-visible="true"] { visibility: visible; animation: none; }
+  #startup-recovery > div { max-width: 34rem; }
+  #startup-recovery a { display: inline-block; margin-top: 1rem; color: #f4c95d; }
+  @keyframes reveal-startup-recovery { to { visibility: visible; } }
+</style>
+<script>
+  (() => {
+    const showRecovery = (error) => {
+      console.error("Play Space startup failed.", error);
+      if (document.documentElement.dataset.appReady === "true") return;
+      const recovery = document.getElementById("startup-recovery");
+      if (!recovery) return;
+      const message = recovery.querySelector("[data-startup-message]");
+      if (message && error?.name === "WebGLInitializationError") {
+        message.textContent = "3D graphics could not start. Enable hardware acceleration or try Chrome.";
+      }
+      recovery.dataset.visible = "true";
+    };
+    window.addEventListener("error", (event) => {
+      const target = event.target;
+      const startupResourceFailed = target instanceof HTMLScriptElement
+        || (target instanceof HTMLLinkElement && target.rel === "stylesheet");
+      if (event.error || startupResourceFailed) showRecovery(event.error ?? event);
+    }, true);
+    window.addEventListener("unhandledrejection", (event) => showRecovery(event.reason));
+  })();
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <canvas id="game"></canvas>
+  <section aria-live="assertive" id="startup-recovery" role="alert">
+    <div>
+      <h1>Play Space could not start</h1>
+      <p data-startup-message>Reload the page. If the problem continues, try Chrome or check the browser console.</p>
+      <a href="%BASE_URL%">Back to Build Arena</a>
+    </div>
+  </section>
   <audio id="theme-music" muted preload="auto" src="%BASE_URL%Going%20Up.ogg"></audio>
 
   <div class="space-load-overlay" id="space-load">
