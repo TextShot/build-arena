@@ -455,6 +455,15 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
 .block-choice[data-block="leaves"] .block-swatch { background: #4f8a51; }
 .block-choice[data-block="glass"] .block-swatch { background: #75bccc; }
 .block-choice[data-block="obsidian"] .block-swatch { background: #302945; }
+.block-choice[data-block="redstone_wire"] .block-swatch { background: #7a0000; }
+.block-choice[data-block="redstone_torch"] .block-swatch { background: #ff3030; }
+.block-choice[data-block="redstone_block"] .block-swatch { background: #c01010; }
+.block-choice[data-block="lever"] .block-swatch { background: #8b5a2b; }
+.block-choice[data-block="button"] .block-swatch { background: #6b4a1b; }
+.block-choice[data-block="repeater"] .block-swatch { background: #b0b0b0; }
+.block-choice[data-block="comparator"] .block-swatch { background: #c8c8c8; }
+.block-choice[data-block="lamp"] .block-swatch { background: #4a3a10; }
+.block-choice[data-block="piston"] .block-swatch { background: #9a7a40; }
 
 .block-choice-label { max-width: 100%; overflow: hidden; color: #c7d1d8; font-size: 0.63rem; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -557,6 +566,62 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
   padding: 0.8rem;
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.layers-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.block-choice.inventory-slot .block-swatch {
+  display: grid;
+  place-items: center;
+  background: #1c2a28;
+  color: #d9f1ff;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.inventory-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgb(4 10 8 / 55%);
+}
+
+.inventory-dialog {
+  width: min(480px, calc(100vw - 2rem));
+  max-height: min(70vh, 32rem);
+  padding: 1rem;
+  overflow: auto;
+  border-radius: 12px;
+  background: rgb(12 24 20 / 96%);
+  color: #d9f1ff;
+}
+
+.inventory-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inventory-list li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.inventory-list img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  background: #102018;
 }
 
 .sidebar-panel:has(.split-stack) {

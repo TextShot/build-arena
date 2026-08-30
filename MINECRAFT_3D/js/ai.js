@@ -1,9 +1,12 @@
-// ai.js — AI behind the chat box. Prefers Claude API; falls back to local rule engine when no key.
-// Built-in RULES as system prompt, constraining AI to redstone building only.
+// ai.js — Play Space WebMCP tools wrapping the Sandbox (agent.js runPlan).
+import { BLOCK_IDS } from "./blocks.js";
+import { runPlan, worldSnapshot } from "./agent.js";
+import { readInventory } from "./inventory.js";
+import { placeBlocksAtOrigin } from "./placement.js";
 
-export const SYSTEM_PROMPT = `You are a building assistant in "Redstone World" who only builds redstone circuits — nothing else.
-Coordinate system: x east+, z south+, y up+. Ground is y=0; components usually go at y=1.
-Available block ids: stone, redstone_wire, redstone_torch, redstone_block, lever, button, repeater, comparator, lamp, piston.
+export const WORLD_RULES = `You are a building assistant in "Redstone World" who only builds redstone circuits — nothing else.
+Coordinate system: x east+, z south+, y up+. Ground grass is y=-1; first empty cell on grass is y=0.
+Coordinate bound is the current world.radius (not ±32). Available block ids: ${BLOCK_IDS.join(", ")}.
 Rules:
 - Redstone dust (redstone_wire) loses 1 signal per block, max 15, disconnects at 0.
 - Signal sources: redstone_torch/redstone_block always 15, lever outputs 15 when on, button pulses 15.
@@ -16,75 +19,135 @@ Each message ends with [World State] listing existing blocks and coordinates —
 - When extending existing structures, use these coordinates; do not overlap existing blocks (unless intentionally overwriting).
 - When building in empty space, pick an area with no blocks.
 When the player asks you to build, output only one JSON code block:
-{"explain":"one-sentence explanation of the circuit","actions":[{"op":"place","block":"lever","x":0,"y":1,"z":0}]}
-op may be place or remove. Max 200 actions. Coordinates are integers, range ±32.
+{"explain":"one-sentence explanation of the circuit","actions":[{"op":"place","block":"lever","x":0,"y":0,"z":0}]}
+op may be place or remove. Max 200 actions. Coordinates are integers; x/z within ±world.radius, y 0..31.
 If some actions are rejected by the system, errors will be sent back — output only the corrected JSON.
 If the player is only asking a question, explain in English; do not output JSON.`;
 
-export async function askClaude(apiKey, model, history) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
+const EMPTY_OBJECT = {
+  type: "object",
+  properties: {},
+  additionalProperties: false,
+};
+
+const COORD = { type: "integer" };
+
+function playSpaceSchemas() {
+  return {
+    get_world_state: {
+      type: "object",
+      description: "Read the current Play Space blocks, platform size, and radius.",
+      properties: {},
+      additionalProperties: false,
     },
-    body: JSON.stringify({
-      model: model || 'claude-opus-4-8',
-      max_tokens: 2000,
-      system: SYSTEM_PROMPT,
-      messages: history,
-    }),
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.content.map(c => c.text || '').join('');
+    run_build_plan: {
+      type: "object",
+      description: `${WORLD_RULES} Passes actions through the Sandbox (runPlan). Returns { ok, applied, errors }.`,
+      properties: {
+        explain: { type: "string", description: "One-sentence explanation of the circuit." },
+        actions: {
+          type: "array",
+          description: "Sandbox actions to apply.",
+          maxItems: 200,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["op", "x", "y", "z"],
+            properties: {
+              op: { type: "string", enum: ["place", "remove"], description: "place a block or remove one." },
+              block: { type: "string", enum: BLOCK_IDS, description: "Catalogue id; required for place." },
+              x: { ...COORD, description: "World X (east+)." },
+              y: { ...COORD, description: "World Y (up+). First cell on grass is 0." },
+              z: { ...COORD, description: "World Z (south+)." },
+              facing: { type: "string", enum: ["N", "E", "S", "W"], description: "Repeater/comparator front." },
+              mode: { type: "string", enum: ["compare", "subtract"], description: "Comparator mode." },
+            },
+          },
+        },
+      },
+      required: ["actions"],
+      additionalProperties: false,
+    },
+    clear_world: {
+      type: "object",
+      description: "Remove every placed block from the Play Space. Terrain stays.",
+      properties: {},
+      additionalProperties: false,
+    },
+    place_blueprint_from_inventory: {
+      type: "object",
+      description: "Place a saved Inventory build at origin using world.place (not runPlan).",
+      properties: {
+        id: { type: "string", description: "Inventory entry id." },
+        origin: {
+          type: "object",
+          additionalProperties: false,
+          required: ["x", "y", "z"],
+          properties: {
+            x: { ...COORD, description: "World X of the min-corner." },
+            y: { ...COORD, description: "Ignored for Y; transplant uses arenaY - 1." },
+            z: { ...COORD, description: "World Z of the min-corner." },
+          },
+        },
+      },
+      required: ["id", "origin"],
+      additionalProperties: false,
+    },
+  };
 }
 
-// ---------- Local fallback: minimal intent parsing, works offline ----------
-export function localBrain(text) {
-  const t = text.toLowerCase();
-  const reply = (explain, actions) =>
-    '(Local mode)\n```json\n' + JSON.stringify({ explain, actions }, null, 2) + '\n```';
+function describeTool(name, schemas) {
+  return schemas[name].description ?? name;
+}
 
-  if (/(switch|lever).*(lamp|light)|lamp.*switch|light.*switch/.test(t)) {
-    return reply('Lever via redstone dust lights a redstone lamp: the most basic switch-controlled circuit.', [
-      { op:'place', block:'lever',         x:0, y:1, z:0 },
-      { op:'place', block:'redstone_wire', x:1, y:1, z:0 },
-      { op:'place', block:'redstone_wire', x:2, y:1, z:0 },
-      { op:'place', block:'lamp',          x:3, y:1, z:0 },
-    ]);
+export async function registerPlaySpaceTools(world, { signal, modelContext } = {}) {
+  const ctx = modelContext ??
+    (typeof document !== "undefined" ? document.modelContext : undefined);
+  if (!ctx || typeof ctx.registerTool !== "function" || signal?.aborted) {
+    return false;
   }
-  if (/not gate|not|inverter|invert/.test(t)) {
-    return reply('NOT gate: torch on stone powered by lever — input on → torch off → output 0.', [
-      { op:'place', block:'lever',          x:0, y:1, z:0 },
-      { op:'place', block:'redstone_wire',  x:1, y:1, z:0 },
-      { op:'place', block:'stone',          x:2, y:1, z:0 },
-      { op:'place', block:'redstone_torch', x:2, y:2, z:0 },
-      { op:'place', block:'redstone_wire',  x:3, y:2, z:0 },
-      { op:'place', block:'lamp',           x:4, y:2, z:0 },
-    ]);
+
+  const schemas = playSpaceSchemas();
+  const names = ["get_world_state", "run_build_plan", "clear_world", "place_blueprint_from_inventory"];
+  const handlers = {
+    get_world_state: () => ({
+      snapshot: worldSnapshot(world),
+      platformSize: world.platformSize,
+      radius: world.radius,
+    }),
+    run_build_plan: (args) => runPlan(world, args ?? {}),
+    clear_world: () => {
+      world.clear();
+      return { ok: true };
+    },
+    place_blueprint_from_inventory: (args) => {
+      const id = args?.id;
+      const origin = args?.origin;
+      const entry = readInventory().entries.find((item) => item.id === id);
+      if (!entry) return { ok: false, error: `No inventory entry "${id}"` };
+      if (!origin || !Number.isInteger(origin.x) || !Number.isInteger(origin.y) || !Number.isInteger(origin.z)) {
+        return { ok: false, error: "origin must be integer {x,y,z}" };
+      }
+      const { applied } = placeBlocksAtOrigin(world, entry.blocks, origin);
+      return { ok: true, applied };
+    },
+  };
+
+  try {
+    for (const name of names) {
+      await ctx.registerTool(
+        {
+          name,
+          description: describeTool(name, schemas),
+          inputSchema: name === "get_world_state" || name === "clear_world" ? EMPTY_OBJECT : schemas[name],
+          annotations: { readOnlyHint: name === "get_world_state" },
+          execute: (args) => handlers[name](args),
+        },
+        signal ? { signal } : undefined,
+      );
+    }
+    return true;
+  } catch {
+    return false;
   }
-  if (/repeater|amplify|boost|extend/.test(t)) {
-    return reply('Use a repeater to boost a decayed signal back to 15 for long-distance transmission.', [
-      { op:'place', block:'redstone_block', x:0, y:1, z:0 },
-      { op:'place', block:'redstone_wire',  x:1, y:1, z:0 },
-      { op:'place', block:'repeater',       x:2, y:1, z:0 },
-      { op:'place', block:'redstone_wire',  x:3, y:1, z:0 },
-      { op:'place', block:'lamp',           x:4, y:1, z:0 },
-    ]);
-  }
-  if (/button|pulse/.test(t)) {
-    return reply('Button pulse circuit: press once, lamp stays on briefly then turns off.', [
-      { op:'place', block:'button',        x:0, y:1, z:0 },
-      { op:'place', block:'redstone_wire', x:1, y:1, z:0 },
-      { op:'place', block:'lamp',          x:2, y:1, z:0 },
-    ]);
-  }
-  if (/clear|reset|empty|delete all/.test(t)) {
-    return reply('Clear world.', []);  // main.js handles empty actions + keyword
-  }
-  // default: treat as question, plain text explanation
-  return 'I can only build redstone circuits~ Try saying:\n• "Build a switch-controlled lamp"\n• "Build a NOT gate / inverter"\n• "Use a repeater to boost signal"\n• "Build a button pulse circuit"\n(Connect Claude API to understand any natural language request)';
 }

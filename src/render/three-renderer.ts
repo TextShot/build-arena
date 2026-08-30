@@ -156,6 +156,21 @@ export class ArenaRenderer {
     this.invalidate();
   }
 
+  captureThumbnail(size = 192): string {
+    this.renderer.render(this.scene, this.camera);
+    const src = this.renderer.domElement;
+    const dst = document.createElement("canvas");
+    dst.width = size;
+    dst.height = size;
+    const ctx = dst.getContext("2d");
+    if (!ctx || src.width === 0) return "";
+    const scale = Math.max(size / src.width, size / src.height);
+    const w = src.width * scale;
+    const h = src.height * scale;
+    ctx.drawImage(src, (size - w) / 2, (size - h) / 2, w, h);
+    return dst.toDataURL("image/jpeg", 0.7);
+  }
+
   dispose(): void {
     this.renderer.setAnimationLoop(null);
     this.animationActive = false;

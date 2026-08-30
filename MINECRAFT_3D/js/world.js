@@ -11,11 +11,12 @@ const FACE_ANGLE = { E:0, S:-Math.PI/2, W:Math.PI, N:Math.PI/2 };
 const FACE_OK = f => f==='E'||f==='W'||f==='N'||f==='S';
 
 export class World {
-  constructor(canvas) {
+  constructor(canvas, platformSize = 51) {
     this.blocks = new Map();
     this.meshes = new Map();
     this.power  = new Map();
     this.particles = [];
+    this.onFrame = null;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8cc5ff);
@@ -34,7 +35,7 @@ export class World {
     sunDisc.position.set(40, 55, -60); this.scene.add(sunDisc);
 
     this.cube = new THREE.BoxGeometry(1, 1, 1);
-    this._terrain(28);
+    this._terrain(platformSize);
     this.raycaster = new THREE.Raycaster();
 
     // black outline on selected block (classic highlight)
@@ -63,19 +64,33 @@ export class World {
   lock(){ this.controls.lock(); }
   unlock(){ this.controls.unlock(); }
 
-  _terrain(n) {
-    this.N = n; const h = n/2;
-    const grass = new THREE.InstancedMesh(this.cube, faceMaterials('grass'), n*n);
-    const m = new THREE.Matrix4(); let i = 0;
-    for (let x=-h;x<h;x++) for (let z=-h;z<h;z++) { m.setPosition(x, -1, z); grass.setMatrixAt(i++, m); }
+  _terrain(platformSize) {
+    const size = (Number.isInteger(platformSize) && platformSize % 2 === 1 && platformSize >= 7 && platformSize <= 101)
+      ? platformSize
+      : 51;
+    if (size !== platformSize) console.log("platformSize must be odd 7–101; using 51");
+    const radius = (size - 1) / 2;
+    this.platformSize = size;
+    this.radius = radius;
+    this.N = size;
+    const count = size * size;
+    const grass = new THREE.InstancedMesh(this.cube, faceMaterials("grass"), count);
+    const m = new THREE.Matrix4();
+    let i = 0;
+    for (let x = -radius; x <= radius; x++) {
+      for (let z = -radius; z <= radius; z++) {
+        m.setPosition(x, -1, z);
+        grass.setMatrixAt(i++, m);
+      }
+    }
     grass.instanceMatrix.needsUpdate = true;
     this.scene.add(grass);
     this.ground = grass;
     // dirt depth below grass layer (gives world edges thickness instead of a floating single layer)
-    const dirtTex = faceMaterials('grass')[3].map;
+    const dirtTex = faceMaterials("grass")[3].map;
     const dirtMat = new THREE.MeshStandardMaterial({ map: dirtTex });
     dirtTex.wrapS = dirtTex.wrapT = THREE.RepeatWrapping;
-    const dirt = new THREE.Mesh(new THREE.BoxGeometry(n, 6, n), dirtMat);
+    const dirt = new THREE.Mesh(new THREE.BoxGeometry(size, 6, size), dirtMat);
     dirt.position.set(0, -4.5, 0); this.scene.add(dirt);
   }
 
@@ -264,6 +279,7 @@ export class World {
   }
 
   _update(dt) {
+    if (typeof this.onFrame === "function") this.onFrame();
     // particles
     for (let i=this.particles.length-1;i>=0;i--){
       const p=this.particles[i]; p.userData.life-=dt;

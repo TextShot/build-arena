@@ -44,13 +44,14 @@ const blockId = {
 
 const blockState = {
   type: "object",
-  description: "Block state. Required for oak_slab {half}, oak_stairs {facing, half}, oak_trapdoor {facing, half, open}; other blocks take no state.",
+  description: "Block state. Required for oak_slab {half}, oak_stairs {facing, half}, oak_trapdoor {facing, half, open}, repeater {facing}, comparator {facing, mode}; other blocks take no state.",
   additionalProperties: false,
   properties: {
     facing: { type: "string", enum: FACINGS, description: "Horizontal direction the block faces." },
     half: { type: "string", enum: ["top", "bottom"], description: "Vertical half of the cell." },
     open: { type: "boolean", description: "Trapdoor open flag." },
     shape: { const: "straight", description: "Stair shape; only straight is supported." },
+    mode: { type: "string", enum: ["compare", "subtract"], description: "Comparator mode." },
   },
 } as const;
 

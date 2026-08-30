@@ -9,38 +9,41 @@
 <body>
   <canvas id="game"></canvas>
 
-  <!-- Crosshair -->
+  <div class="space-load-overlay" id="space-load">
+    <div
+      aria-label="Loading space"
+      aria-valuemax="100"
+      aria-valuemin="0"
+      aria-valuenow="13"
+      class="space-load-bar"
+      role="progressbar"
+    >
+      <span></span>
+    </div>
+  </div>
+
   <div id="crosshair">+</div>
 
-  <!-- Click to enter overlay -->
   <div id="blocker"><div class="panel">
     <h1>Redstone World</h1>
     <p>Click to enter · First person</p>
-    <small>WASD move · Space up · Shift down<br>Left click break · Right click place · Scroll/1-9 select block · Press T to chat with AI</small>
+    <small>WASD move · Space up · Shift down<br>Left click break · Right click place · Scroll/1-9 select block<br>⋯ opens Inventory · Esc cancels placement</small>
   </div></div>
 
-  <!-- Bottom hotbar -->
+  <button id="to-arena" type="button">Build Arena</button>
+
   <div id="hud">
     <div id="held"></div>
     <div id="hotbar"></div>
   </div>
 
-  <!-- Classic bottom chat box -->
-  <div id="chat">
-    <div id="chat-log"></div>
-    <div id="chat-input-row">
-      <span class="prompt">&gt;</span>
-      <textarea id="chat-input" rows="1" placeholder="Tell the AI: build a NOT gate…"></textarea>
+  <div hidden id="inventory-overlay">
+    <div aria-label="Inventory" class="inventory-dialog" role="dialog">
+      <h2>Inventory</h2>
+      <p class="empty-state">No saved builds</p>
+      <ul class="inventory-list"></ul>
     </div>
   </div>
-
-  <!-- Settings (API Key) -->
-  <details id="settings">
-    <summary>⚙️</summary>
-    <input id="apikey" type="password" placeholder="Anthropic API Key (leave blank = local mode)">
-    <input id="model" type="text" placeholder="Model, default claude-opus-4-8">
-    <p class="tip">Key is stored in memory only; refresh clears it.</p>
-  </details>
 
   <script type="module" src="js/main.js"></script>
 </body>

@@ -48,6 +48,15 @@ const BLOCK_MATERIALS: Record<BlockId, MeshStandardMaterialParameters> = {
   oak_fence: { color: 0xb08046, roughness: 0.85, metalness: 0 },
   stone_wall: { color: 0x7d858b, roughness: 0.9, metalness: 0 },
   oak_trapdoor: { color: 0xb08046, roughness: 0.8, metalness: 0 },
+  redstone_wire: { color: 0x7a0000, roughness: 0.9, metalness: 0 },
+  redstone_torch: { color: 0xff3030, roughness: 0.7, metalness: 0 },
+  redstone_block: { color: 0xc01010, roughness: 0.7, metalness: 0 },
+  lever: { color: 0x8b5a2b, roughness: 0.88, metalness: 0 },
+  button: { color: 0x6b4a1b, roughness: 0.88, metalness: 0 },
+  repeater: { color: 0xb0b0b0, roughness: 0.8, metalness: 0 },
+  comparator: { color: 0xc8c8c8, roughness: 0.8, metalness: 0 },
+  lamp: { color: 0x4a3a10, roughness: 0.55, metalness: 0 },
+  piston: { color: 0x9a7a40, roughness: 0.85, metalness: 0 },
 };
 
 /** Clockwise-from-north yaw for geometries authored facing north (-Z). */

@@ -1,16 +1,17 @@
 import { BLOCK_CATALOGUE } from "../core/blocks";
-import { PHASE_A_BLOCK_IDS, type BlockId } from "../core/block-types";
+import { PALETTE_BLOCK_IDS, type BlockId } from "../core/block-types";
 
 type BlockPaletteProps = Readonly<{
   selectedBlock: BlockId;
   onSelect: (block: BlockId) => void;
+  onOpenInventory: () => void;
 }>;
 
-export function BlockPalette({ selectedBlock, onSelect }: BlockPaletteProps) {
+export function BlockPalette({ selectedBlock, onSelect, onOpenInventory }: BlockPaletteProps) {
   return (
     <section className="block-palette" aria-labelledby="block-palette-title">
       <h2 className="sr-only" id="block-palette-title">Block palette</h2>
-      {PHASE_A_BLOCK_IDS.map((blockId) => {
+      {PALETTE_BLOCK_IDS.map((blockId) => {
         const block = BLOCK_CATALOGUE[blockId];
         const selected = blockId === selectedBlock;
         return (
@@ -30,6 +31,16 @@ export function BlockPalette({ selectedBlock, onSelect }: BlockPaletteProps) {
           </button>
         );
       })}
+      <button
+        aria-label="Open inventory"
+        className="block-choice inventory-slot"
+        onClick={onOpenInventory}
+        title="Inventory"
+        type="button"
+      >
+        <span aria-hidden="true" className="block-swatch">⋯</span>
+        <span className="block-choice-label">Inventory</span>
+      </button>
     </section>
   );
 }

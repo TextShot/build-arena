@@ -12,7 +12,33 @@ export const BLOCKS = {
   comparator:     { name: 'Comparator',     color: 0xc8c8c8, solid: false, comparator: true },
   lamp:           { name: 'Redstone Lamp',  color: 0x4a3a10, solid: false, lamp: true },
   piston:         { name: 'Piston',         color: 0x9a7a40, solid: true,  piston: true },
+  dirt:           { name: 'Dirt',           color: 0x8b5a35, solid: true  },
+  oak_log:        { name: 'Oak log',        color: 0x7a4e2d, solid: true  },
+  oak_planks:     { name: 'Oak planks',     color: 0xc49355, solid: true  },
+  leaves:         { name: 'Leaves',         color: 0x4f8a51, solid: true  },
+  glass:          { name: 'Glass',          color: 0x9adbe8, solid: true  },
+  obsidian:       { name: 'Obsidian',       color: 0x28243b, solid: true  },
+  water:          { name: 'Water',          color: 0x3f76e4, solid: false },
+  lava:           { name: 'Lava',           color: 0xd45a12, solid: false },
+  oak_slab:       { name: 'Oak slab',       color: 0xc49355, solid: false },
+  oak_stairs:     { name: 'Oak stairs',     color: 0xc49355, solid: false },
+  oak_fence:      { name: 'Oak fence',      color: 0xb08046, solid: false },
+  stone_wall:     { name: 'Stone wall',     color: 0x7d858b, solid: false },
+  oak_trapdoor:   { name: 'Oak trapdoor',   color: 0xb08046, solid: false },
 };
+
+export const HOTBAR_IDS = Object.freeze([
+  'stone',
+  'redstone_wire',
+  'redstone_torch',
+  'redstone_block',
+  'lever',
+  'button',
+  'repeater',
+  'comparator',
+  'lamp',
+  'piston',
+]);
 
 export const BLOCK_IDS = Object.keys(BLOCKS);
 

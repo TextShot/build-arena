@@ -21,4 +21,13 @@ export const BLOCK_CATALOGUE = Object.freeze({
   oak_fence: Object.freeze({ id: "oak_fence", label: "Oak fence", fullCube: false }),
   stone_wall: Object.freeze({ id: "stone_wall", label: "Stone wall", fullCube: false }),
   oak_trapdoor: Object.freeze({ id: "oak_trapdoor", label: "Oak trapdoor", fullCube: false }),
+  redstone_wire: Object.freeze({ id: "redstone_wire", label: "Redstone Dust", fullCube: false }),
+  redstone_torch: Object.freeze({ id: "redstone_torch", label: "Redstone Torch", fullCube: false }),
+  redstone_block: Object.freeze({ id: "redstone_block", label: "Redstone Block", fullCube: true }),
+  lever: Object.freeze({ id: "lever", label: "Lever", fullCube: false }),
+  button: Object.freeze({ id: "button", label: "Button", fullCube: false }),
+  repeater: Object.freeze({ id: "repeater", label: "Repeater", fullCube: false }),
+  comparator: Object.freeze({ id: "comparator", label: "Comparator", fullCube: false }),
+  lamp: Object.freeze({ id: "lamp", label: "Redstone Lamp", fullCube: false }),
+  piston: Object.freeze({ id: "piston", label: "Piston", fullCube: true }),
 } satisfies Record<BlockId, BlockCatalogueEntry>);

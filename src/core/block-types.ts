@@ -21,9 +21,28 @@ export const PHASE_6_BLOCK_IDS = Object.freeze([
   "oak_trapdoor",
 ] as const);
 
+/** Visual-only redstone kit. Stored orientation, no Arena simulation. */
+export const REDSTONE_BLOCK_IDS = Object.freeze([
+  "redstone_wire",
+  "redstone_torch",
+  "redstone_block",
+  "lever",
+  "button",
+  "repeater",
+  "comparator",
+  "lamp",
+  "piston",
+] as const);
+
+export const PALETTE_BLOCK_IDS = Object.freeze([
+  ...PHASE_A_BLOCK_IDS,
+  ...REDSTONE_BLOCK_IDS,
+] as const);
+
 export const ALL_BLOCK_IDS = Object.freeze([
   ...PHASE_A_BLOCK_IDS,
   ...PHASE_6_BLOCK_IDS,
+  ...REDSTONE_BLOCK_IDS,
 ] as const);
 
 export type BlockId = (typeof ALL_BLOCK_IDS)[number];
@@ -34,7 +53,8 @@ export type BlockHalf = "top" | "bottom";
 
 /**
  * Canonical block state. Which keys are required depends on the block:
- * slab {half}, stairs {facing, half, shape}, trapdoor {facing, half, open}.
+ * slab {half}, stairs {facing, half, shape}, trapdoor {facing, half, open},
+ * repeater {facing}, comparator {facing, mode}.
  * Fence/wall connections derive from neighbours and are never stored.
  */
 export type BlockState = Readonly<{
@@ -42,14 +62,17 @@ export type BlockState = Readonly<{
   half?: BlockHalf;
   open?: boolean;
   shape?: "straight";
+  mode?: "compare" | "subtract";
 }>;
 
-export type BlockStateKind = "none" | "slab" | "stairs" | "trapdoor";
+export type BlockStateKind = "none" | "slab" | "stairs" | "trapdoor" | "repeater" | "comparator";
 
 export function blockStateKind(block: BlockId): BlockStateKind {
   if (block === "oak_slab") return "slab";
   if (block === "oak_stairs") return "stairs";
   if (block === "oak_trapdoor") return "trapdoor";
+  if (block === "repeater") return "repeater";
+  if (block === "comparator") return "comparator";
   return "none";
 }
 
@@ -130,11 +153,26 @@ export function normalizeBlockState(block: BlockId, state: unknown): NormalizedS
     ? ["half"]
     : kind === "stairs"
       ? ["facing", "half", "shape"]
-      : ["facing", "half", "open"];
+      : kind === "repeater"
+        ? ["facing"]
+        : kind === "comparator"
+          ? ["facing", "mode"]
+          : ["facing", "half", "open"];
   for (const key of Object.keys(value)) {
     if (!allowedKeys.includes(key)) {
       return { ok: false, error: `${block} state does not support "${key}"` };
     }
+  }
+  if (kind === "repeater") {
+    if (!isFacing(value.facing)) return { ok: false, error: `${block} state requires facing: north, east, south, or west` };
+    return { ok: true, state: Object.freeze({ facing: value.facing }) };
+  }
+  if (kind === "comparator") {
+    if (!isFacing(value.facing)) return { ok: false, error: `${block} state requires facing: north, east, south, or west` };
+    if (value.mode !== "compare" && value.mode !== "subtract") {
+      return { ok: false, error: `${block} state requires mode: compare or subtract` };
+    }
+    return { ok: true, state: Object.freeze({ facing: value.facing, mode: value.mode }) };
   }
   if (!isBlockHalf(value.half)) return { ok: false, error: `${block} state requires half: top or bottom` };
   if (kind === "slab") {
@@ -154,7 +192,14 @@ export function normalizeBlockState(block: BlockId, state: unknown): NormalizedS
 export function blockStateEquals(a: BlockState | undefined, b: BlockState | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.facing === b.facing && a.half === b.half && a.open === b.open && a.shape === b.shape;
+  return a.facing === b.facing && a.half === b.half && a.open === b.open && a.shape === b.shape && a.mode === b.mode;
+}
+
+/** Default place state. Comparator mode is supplied here, not in normalizeBlockState. */
+export function defaultStateFor(block: BlockId): BlockState | undefined {
+  if (block === "repeater") return Object.freeze({ facing: "east" });
+  if (block === "comparator") return Object.freeze({ facing: "east", mode: "compare" });
+  return undefined;
 }
 
 /** Rotates a facing clockwise (viewed from above) by quarter turns. */

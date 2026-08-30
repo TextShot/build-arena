@@ -1,5 +1,34 @@
-// textures.js — Block materials: load ../<name>.png from assets /assets hand-drawn pixel textures + procedural redstone dust connections
+// textures.js — Block materials: PNGs live in repo `assets /assets/` (space in the folder name).
 import * as THREE from '../vendor/three.module.js';
+import { BLOCKS } from './blocks.js';
+
+import comparatorTopPng from "@block-png/comparator_top.png?url";
+import dirtPng from "@block-png/dirt.png?url";
+import grassSidePng from "@block-png/grass_side.png?url";
+import grassTopPng from "@block-png/grass_top.png?url";
+import lampOffPng from "@block-png/lamp_off.png?url";
+import lampOnPng from "@block-png/lamp_on.png?url";
+import pistonSidePng from "@block-png/piston_side.png?url";
+import pistonTopPng from "@block-png/piston_top.png?url";
+import redstoneBlockPng from "@block-png/redstone_block.png?url";
+import repeaterSidePng from "@block-png/repeater_side.png?url";
+import repeaterTopPng from "@block-png/repeater_top.png?url";
+import stonePng from "@block-png/stone.png?url";
+
+const PNG = {
+  comparator_top: comparatorTopPng,
+  dirt: dirtPng,
+  grass_side: grassSidePng,
+  grass_top: grassTopPng,
+  lamp_off: lampOffPng,
+  lamp_on: lampOnPng,
+  piston_side: pistonSidePng,
+  piston_top: pistonTopPng,
+  redstone_block: redstoneBlockPng,
+  repeater_side: repeaterSidePng,
+  repeater_top: repeaterTopPng,
+  stone: stonePng,
+};
 
 const S = 16;
 const matCache = new Map();
@@ -9,10 +38,14 @@ const loader = new THREE.TextureLoader();
 function canvas() { const c = document.createElement('canvas'); c.width = c.height = S; return c; }
 const px = (ctx,x,y,c)=>{ ctx.fillStyle=c; ctx.fillRect(x,y,1,1); };
 
+function texUrl(name) {
+  return PNG[name];
+}
+
 // Load PNG textures (NearestFilter keeps pixel look), with cache
 function loadTex(name) {
   if (texCache.has(name)) return texCache.get(name);
-  const t = loader.load(`../${name}.png`);
+  const t = loader.load(texUrl(name));
   t.magFilter = t.minFilter = THREE.NearestFilter;
   t.colorSpace = THREE.SRGBColorSpace;
   texCache.set(name, t);
@@ -66,7 +99,13 @@ export function faceMaterials(id, lit=false) {
         emissiveMap: lit?map:null, emissiveIntensity: lit?1.4:0 });
       break; }
     case 'redstone_block': res = M('redstone_block'); break;
-    case 'stone': default: res = M('stone'); break;
+    case 'dirt': res = M('dirt'); break;
+    case 'stone': res = M('stone'); break;
+    default: {
+      const color = BLOCKS[id]?.color ?? 0x8a8a8a;
+      res = new THREE.MeshStandardMaterial({ color });
+      break;
+    }
   }
   matCache.set(k, res); return res;
 }
@@ -77,10 +116,10 @@ const ICON_PNG = { stone:'stone', grass:'grass_side', redstone_block:'redstone_b
 export function iconCanvas(id) {
   const out = document.createElement('canvas'); out.width = out.height = 32;
   const o = out.getContext('2d'); o.imageSmoothingEnabled = false;
-  if (ICON_PNG[id]) {                                   // use PNG texture as icon
+  if (ICON_PNG[id]) {
     const img = new Image();
     img.onload = () => { o.imageSmoothingEnabled=false; o.drawImage(img,0,0,32,32); };
-    img.src = `../${ICON_PNG[id]}.png`;
+    img.src = texUrl(ICON_PNG[id]);
     return out;
   }
   // redstone components (dust/torch/lever/button) use simple pixel sketch

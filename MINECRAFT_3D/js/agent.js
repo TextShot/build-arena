@@ -3,7 +3,7 @@
 import { BLOCK_IDS } from './blocks.js';
 
 const MAX_ACTIONS = 200;
-const BOUND = 32;  // coordinate range limit
+const MAX_BUILD_HEIGHT = 31;
 
 // Validate and execute an agent plan. Returns {ok, applied, errors}
 export function runPlan(world, plan) {
@@ -16,7 +16,7 @@ export function runPlan(world, plan) {
   }
   let applied = 0;
   for (const [i, a] of plan.actions.entries()) {
-    const e = validate(a);
+    const e = validate(a, world);
     if (e) { errors.push(`#${i}: ${e}`); continue; }
     if (a.op === 'place') world.place(a.x, a.y, a.z, a.block, { facing: a.facing, mode: a.mode });
     else if (a.op === 'remove') world.remove(a.x, a.y, a.z);
@@ -25,12 +25,16 @@ export function runPlan(world, plan) {
   return { ok: errors.length === 0, applied, errors };
 }
 
-function validate(a) {
+function validate(a, world) {
   if (!a || typeof a !== 'object') return 'Action is not an object';
   if (a.op !== 'place' && a.op !== 'remove') return `Invalid op=${a.op}`;
   for (const c of ['x','y','z']) {
     if (!Number.isInteger(a[c])) return `${c} must be an integer`;
-    if (Math.abs(a[c]) > BOUND) return `${c} out of range ±${BOUND}`;
+    if (c === 'y') {
+      if (a.y < 0 || a.y > MAX_BUILD_HEIGHT) return `y out of range 0..${MAX_BUILD_HEIGHT}`;
+    } else if (Math.abs(a[c]) > world.radius) {
+      return `${c} out of range ±${world.radius}`;
+    }
   }
   if (a.op === 'place' && !BLOCK_IDS.includes(a.block)) {
     return `Unknown block "${a.block}" (not on whitelist, rejected)`;

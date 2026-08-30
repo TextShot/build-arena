@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
 import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
 import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
+import { defaultStateFor, rotateFacing, type BlockId, type BlockState } from "../core/block-types";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
 import { ArenaRenderer } from "../render/three-renderer";
@@ -14,7 +15,15 @@ import {
   parseBlueprintJson,
   serializeBlueprintJson,
 } from "../storage/blueprint-json";
+import {
+  addEntry,
+  readInventory,
+  removeEntry,
+  toRelativeBlocks,
+  writeHandoff,
+} from "../storage/inventory";
 import { BlockPalette } from "./BlockPalette";
+import { InventoryOverlay } from "./InventoryOverlay";
 import { SpaceLoadOverlay } from "./SpaceLoadOverlay";
 
 type ActivityActor = "you" | "agent";
@@ -52,6 +61,8 @@ export function BuildArenaPage() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("Click place \ndouble-click select\nRight-click remove");
   const [spaceReady, setSpaceReady] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [inventoryEntries, setInventoryEntries] = useState(() => readInventory().entries);
   const nextActivityId = useRef(1);
   const rendererHost = useRef<HTMLDivElement>(null);
   const rendererInstance = useRef<ArenaRenderer | null>(null);
@@ -103,10 +114,11 @@ export function BuildArenaPage() {
   const placeCell = useCallback((coordinate: Coordinate) => {
     if (blockLockedManualWrite()) return;
     const block = useUiStore.getState().selectedBlock;
+    const state = defaultStateFor(block);
     const result = engine.apply({
       type: "set_blocks",
       expectedRevision: engine.getContext().revision,
-      edits: [{ action: "place", position: coordinate, block }],
+      edits: [{ action: "place", position: coordinate, block, ...(state ? { state } : {}) }],
     });
     setSummary(engine.getSummary());
     addActivity({
@@ -220,6 +232,50 @@ export function BuildArenaPage() {
     handleResult(result, type, "{}");
   };
 
+  const applyReplace = (position: Coordinate, block: BlockId, state: BlockState) => {
+    if (blockLockedManualWrite()) return;
+    const result = engine.apply({
+      type: "set_blocks",
+      expectedRevision: engine.getContext().revision,
+      edits: [{ action: "replace", position, block, state }],
+    });
+    handleResult(result, "rotate", JSON.stringify({ position, block, state }));
+  };
+
+  const saveToInventory = () => {
+    const blocks = engine.snapshotBlocks();
+    if (blocks.length === 0) {
+      setStatusMessage("Nothing to save");
+      return;
+    }
+    const result = addEntry({
+      name: `Build ${readInventory().entries.length + 1}`,
+      platformSize,
+      buildHeight,
+      thumbnail: rendererInstance.current?.captureThumbnail() ?? "",
+      blocks: toRelativeBlocks(blocks),
+    });
+    if (!result.ok) {
+      setStatusMessage(result.error);
+      return;
+    }
+    setInventoryEntries(readInventory().entries);
+    setStatusMessage(`Saved ${result.entry.name}`);
+  };
+
+  const goToPlaySpace = (kind: "visit" | "place") => {
+    const blocks = engine.snapshotBlocks();
+    const handoff = kind === "place" && blocks.length > 0
+      ? { kind: "place" as const, platformSize, buildHeight, blocks: toRelativeBlocks(blocks) }
+      : { kind: "visit" as const, platformSize, buildHeight };
+    const written = writeHandoff(handoff);
+    if (!written.ok) {
+      setStatusMessage(written.error);
+      return;
+    }
+    window.location.assign("/MINECRAFT_3D/index.html");
+  };
+
   const resizePlatform = (nextSize: number) => {
     if (blockLockedManualWrite()) return;
     const result = engine.resizePlatform(nextSize);
@@ -256,6 +312,26 @@ export function BuildArenaPage() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         applyHistory(event.shiftKey ? "redo" : "undo");
+        return;
+      }
+      const selected = useUiStore.getState().selectedCoordinate;
+      if (!selected) return;
+      const cell = cellAt(engine, selected);
+      if (!cell) return;
+      if (event.key.toLowerCase() === "r" && (cell.block === "repeater" || cell.block === "comparator")) {
+        event.preventDefault();
+        const facing = rotateFacing(cell.state?.facing ?? "east", 1);
+        const state = cell.block === "comparator"
+          ? { facing, mode: cell.state?.mode === "subtract" ? "subtract" as const : "compare" as const }
+          : { facing };
+        applyReplace(selected, cell.block, state);
+        return;
+      }
+      if (event.key.toLowerCase() === "m" && cell.block === "comparator") {
+        event.preventDefault();
+        const facing = cell.state?.facing ?? "east";
+        const mode = cell.state?.mode === "subtract" ? "compare" as const : "subtract" as const;
+        applyReplace(selected, cell.block, { facing, mode });
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -334,7 +410,7 @@ export function BuildArenaPage() {
 
       <header className="arena-topbar">
         <nav className="product-tabs" aria-label="Workspace">
-          <button disabled title="Opens 3d world" type="button">Minecraft</button>
+          <button onClick={() => goToPlaySpace("visit")} title="Opens 3d world" type="button">Minecraft</button>
           <button aria-current="page" type="button">Build Arena</button>
         </nav>
         <div className="topbar-actions">
@@ -393,7 +469,14 @@ export function BuildArenaPage() {
           <div className="viewport-status" role="status" aria-live="polite">
             <strong>{statusMessage}</strong>
           </div>
-          <BlockPalette selectedBlock={selectedBlock} onSelect={setSelectedBlock} />
+          <BlockPalette
+            onOpenInventory={() => {
+              setInventoryEntries(readInventory().entries);
+              setInventoryOpen(true);
+            }}
+            onSelect={setSelectedBlock}
+            selectedBlock={selectedBlock}
+          />
         </section>
 
         <aside
@@ -453,6 +536,10 @@ export function BuildArenaPage() {
                         ))}
                       </ul>
                     )}
+                    <div className="layers-footer">
+                      <button onClick={saveToInventory} type="button">Add to inventory</button>
+                      <button onClick={() => goToPlaySpace("place")} type="button">Open in 3D</button>
+                    </div>
                   </section>
                 )}
 
@@ -495,6 +582,20 @@ export function BuildArenaPage() {
           )}
         </aside>
       </main>
+      {inventoryOpen && (
+        <InventoryOverlay
+          entries={inventoryEntries}
+          onClose={() => setInventoryOpen(false)}
+          onDelete={(id) => {
+            const result = removeEntry(id);
+            if (!result.ok) {
+              setStatusMessage(result.error);
+              return;
+            }
+            setInventoryEntries(readInventory().entries);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -618,11 +719,15 @@ function formatCoord(coordinate: Coordinate): string {
   return `(${coordinate.x}, ${coordinate.y}, ${coordinate.z})`;
 }
 
-function blockAt(engine: ArenaEngine, coordinate: Coordinate) {
+function cellAt(engine: ArenaEngine, coordinate: Coordinate) {
   return engine.queryBlocks({
     region: { min: coordinate, max: coordinate },
     limit: 1,
-  }).blocks[0]?.block ?? null;
+  }).blocks[0] ?? null;
+}
+
+function blockAt(engine: ArenaEngine, coordinate: Coordinate) {
+  return cellAt(engine, coordinate)?.block ?? null;
 }
 
 function isInsideArena(coordinate: Coordinate, engine: ArenaEngine): boolean {

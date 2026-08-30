@@ -28,9 +28,9 @@ Use these names in code, comments, and UI copy. Do not invent synonyms.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Merge the block Catalogue both ways | P1 | M | — | TODO |
-| 002 | Inventory, thumbnails, Arena UI | P1 | M | 001 | TODO |
-| 003 | Play Space: drop Claude, WebMCP, place builds | P1 | L | 002 | TODO |
+| 001 | Merge the block Catalogue both ways | P1 | M | — | DONE |
+| 002 | Inventory, thumbnails, Arena UI | P1 | M | 001 | DONE |
+| 003 | Play Space: drop Claude, WebMCP, place builds | P1 | L | 002 | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED
 
