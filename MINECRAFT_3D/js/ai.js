@@ -137,11 +137,14 @@ export async function registerPlaySpaceTools(world, { signal, modelContext, onRe
   const abortRegistrations = () => registrationController.abort(signal?.reason);
   signal?.addEventListener("abort", abortRegistrations, { once: true });
 
-  try {
-    for (const name of names) {
-      if (registrationController.signal.aborted) {
-        throw registrationController.signal.reason ?? new Error("Tool registration aborted");
-      }
+  let allRegistered = true;
+  let registrationError;
+  for (const name of names) {
+    if (registrationController.signal.aborted) {
+      allRegistered = false;
+      break;
+    }
+    try {
       await ctx.registerTool(
         {
           name,
@@ -152,13 +155,12 @@ export async function registerPlaySpaceTools(world, { signal, modelContext, onRe
         },
         { signal: registrationController.signal },
       );
+    } catch (error) {
+      allRegistered = false;
+      registrationError = error;
+      console.error("Play Space tool registration failed.", error);
     }
-    return true;
-  } catch (error) {
-    registrationController.abort(error);
-    signal?.removeEventListener("abort", abortRegistrations);
-    console.error("Play Space tool registration failed.", error);
-    onRegistrationError?.(error);
-    return false;
   }
+  if (registrationError) onRegistrationError?.(registrationError);
+  return allRegistered;
 }

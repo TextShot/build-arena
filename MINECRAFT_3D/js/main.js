@@ -490,7 +490,7 @@ addEventListener("keydown", (e) => {
 const toolAbort = new AbortController();
 await registerPlaySpaceTools(world, {
   signal: toolAbort.signal,
-  onRegistrationError: () => flashEditingStatus("Agent tools unavailable. Reload to retry.", 6000),
+  onRegistrationError: () => flashEditingStatus("Some agent tools failed to load.", 6000),
 });
 document.documentElement.dataset.appReady = "true";
 document.getElementById("startup-recovery")?.setAttribute("hidden", "");

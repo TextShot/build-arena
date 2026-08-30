@@ -23,13 +23,19 @@ afterEach(() => {
 });
 
 describe("registerPlaySpaceTools", () => {
-  it("removes tools registered before a later registration fails", async () => {
+  it("keeps tools that registered before a later registration fails", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const onRegistrationError = vi.fn();
     const modelContext = modelContextThatFailsOn("clear_world");
 
-    expect(await registerPlaySpaceTools({}, { modelContext })).toBe(false);
-    expect(modelContext.registeredNames).toEqual(["get_world_state", "run_build_plan"]);
-    expect(modelContext.tools.size).toBe(0);
+    expect(await registerPlaySpaceTools({}, { modelContext, onRegistrationError })).toBe(false);
+    expect(modelContext.registeredNames).toEqual([
+      "get_world_state",
+      "run_build_plan",
+      "place_blueprint_from_inventory",
+    ]);
+    expect(modelContext.tools.size).toBe(3);
+    expect(onRegistrationError).toHaveBeenCalledWith(expect.any(Error));
     expect(consoleError).toHaveBeenCalledWith("Play Space tool registration failed.", expect.any(Error));
   });
 
