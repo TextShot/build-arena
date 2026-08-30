@@ -16,6 +16,29 @@ const SPACE_LOAD_DONE_PERCENT = 100;
 const SPACE_LOAD_MID_AT_MS = 500;
 const SPACE_LOAD_MIN_MS = 600;
 const SPACE_LOAD_FALLBACK_MS = 4000;
+const INPUT_MODE_STORAGE_KEY = "build-arena.input-mode.v1";
+const INPUT_MODE_MOUSE = "mouse";
+const INPUT_MODE_TOUCHPAD = "touchpad";
+
+function readInputMode() {
+  try {
+    return localStorage.getItem(INPUT_MODE_STORAGE_KEY) === INPUT_MODE_TOUCHPAD
+      ? INPUT_MODE_TOUCHPAD
+      : INPUT_MODE_MOUSE;
+  } catch {
+    return INPUT_MODE_MOUSE;
+  }
+}
+
+function saveInputMode(mode) {
+  try {
+    localStorage.setItem(INPUT_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Storage may be unavailable; the in-session preference still applies.
+  }
+}
+
+let inputMode = readInputMode();
 
 function spaceLoadPercent(elapsedMs, spaceReady) {
   if (elapsedMs >= SPACE_LOAD_FALLBACK_MS) return SPACE_LOAD_DONE_PERCENT;
@@ -78,6 +101,7 @@ tickLoad();
 
 const bar = document.getElementById("hotbar");
 const editingStatus = document.getElementById("editing-status");
+const inputModeHint = document.getElementById("input-mode-hint");
 const signEditorOverlay = document.getElementById("sign-editor-overlay");
 const signEditorForm = document.getElementById("sign-editor-form");
 const signEditorText = document.getElementById("sign-editor-text");
@@ -151,6 +175,24 @@ function flashEditingStatus(message, duration = 1800) {
   editingStatusTimer = setTimeout(() => updateEditingStatus(), duration);
 }
 
+function updateInputModeHint() {
+  if (!inputModeHint) return;
+  inputModeHint.textContent = inputMode === INPUT_MODE_TOUCHPAD
+    ? "Touchpad Mode: hotbar scroll is disabled. Use 0–9, B, or click a hotbar slot."
+    : "Using a touchpad? Press Shift + T to enter Touchpad Mode.";
+}
+
+function toggleInputMode() {
+  inputMode = inputMode === INPUT_MODE_MOUSE ? INPUT_MODE_TOUCHPAD : INPUT_MODE_MOUSE;
+  saveInputMode(inputMode);
+  updateInputModeHint();
+  flashEditingStatus(inputMode === INPUT_MODE_TOUCHPAD
+    ? "Touchpad Mode enabled — hotbar scroll disabled"
+    : "Mouse Mode enabled — hotbar scroll selects blocks");
+}
+
+updateInputModeHint();
+
 function handleHistoryResult(result) {
   if (result.status === "applied") {
     updateEditingStatus();
@@ -209,6 +251,16 @@ addEventListener("keydown", (event) => {
 
 addEventListener("keydown", (event) => {
   if (
+    event.code !== "KeyT" || !event.shiftKey || event.repeat ||
+    event.metaKey || event.ctrlKey || event.altKey ||
+    signEditorOpen()
+  ) return;
+  event.preventDefault();
+  toggleInputMode();
+});
+
+addEventListener("keydown", (event) => {
+  if (
     event.code !== "KeyM" || event.repeat ||
     event.metaKey || event.ctrlKey || event.altKey ||
     signEditorOpen()
@@ -231,6 +283,7 @@ addEventListener("keydown", (e) => {
 });
 let lastHotbarScrollAt = -Infinity;
 addEventListener("wheel", (event) => {
+  if (inputMode !== INPUT_MODE_MOUSE) return;
   const menuOpen = signEditorOpen()
     || inventoryOpen()
     || loadEl?.isConnected
