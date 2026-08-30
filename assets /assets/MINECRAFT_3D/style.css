@@ -1,0 +1,51 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden;
+  font-family: "Minecraft", "Courier New", monospace; user-select: none; }
+#game { position: fixed; inset: 0; display: block; }
+
+/* Crosshair */
+#crosshair { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  color: #fff; font-size: 26px; mix-blend-mode: difference; pointer-events: none; z-index: 5; }
+
+/* Enter overlay */
+#blocker { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.45); z-index: 20; cursor: pointer; }
+#blocker .panel { text-align: center; color: #fff; text-shadow: 2px 2px #000; }
+#blocker h1 { font-size: 46px; margin: 0 0 10px; letter-spacing: 2px; }
+#blocker small { color: #ddd; line-height: 1.8; }
+
+/* Bottom hotbar — classic style */
+#hud { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 10; }
+#held { color: #fff; text-shadow: 2px 2px #000; font-size: 14px; height: 18px; }
+#hotbar { display: flex; gap: 2px; background: rgba(0,0,0,.5);
+  border: 2px solid #1d1d1d; padding: 3px; border-radius: 2px; }
+.slot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  background: #8b8b8b55; border: 2px solid #373737; }
+.slot.on { border-color: #fff; box-shadow: 0 0 0 2px #fff inset; }
+.slot canvas { width: 30px; height: 30px; image-rendering: pixelated; }
+
+/* Classic bottom chat box */
+#chat { position: fixed; left: 8px; bottom: 60px; width: 50%; max-width: 620px; z-index: 15; }
+#chat-log { display: flex; flex-direction: column; gap: 1px; max-height: 42vh; overflow-y: auto;
+  margin-bottom: 4px; }
+#chat-log::-webkit-scrollbar { width: 0; }
+.line { background: rgba(0,0,0,.5); color: #fff; text-shadow: 1px 1px #000;
+  font-size: 14px; padding: 2px 5px; line-height: 1.45; word-break: break-word; }
+.line .who { color: #ff7b7b; }
+.line.user .who { color: #79c0ff; }
+.line.sys { color: #ffd479; }
+.line.ai { color: #e8e8e8; }
+#chat-input-row { display: none; align-items: flex-start; gap: 4px;
+  background: rgba(0,0,0,.65); padding: 4px 6px; }
+#chat.open #chat-input-row { display: flex; }
+.prompt { color: #fff; text-shadow: 1px 1px #000; padding-top: 3px; }
+#chat-input { flex: 1; background: transparent; border: none; outline: none; resize: none;
+  color: #fff; text-shadow: 1px 1px #000; font: inherit; font-size: 14px; }
+
+/* Settings */
+#settings { position: fixed; top: 8px; right: 8px; z-index: 18;
+  background: rgba(0,0,0,.6); color: #fff; padding: 6px; border-radius: 4px; }
+#settings summary { cursor: pointer; list-style: none; }
+#settings input { display: block; width: 240px; margin-top: 6px; padding: 5px; font: inherit; }
+.tip { color: #aaa; font-size: 11px; margin: 6px 0 0; }

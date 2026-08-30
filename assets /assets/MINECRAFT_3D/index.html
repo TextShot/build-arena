@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redstone World · First Person</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Crosshair -->
+  <div id="crosshair">+</div>
+
+  <!-- Click to enter overlay -->
+  <div id="blocker"><div class="panel">
+    <h1>Redstone World</h1>
+    <p>Click to enter · First person</p>
+    <small>WASD move · Space up · Shift down<br>Left click break · Right click place · Scroll/1-9 select block · Press T to chat with AI</small>
+  </div></div>
+
+  <!-- Bottom hotbar -->
+  <div id="hud">
+    <div id="held"></div>
+    <div id="hotbar"></div>
+  </div>
+
+  <!-- Classic bottom chat box -->
+  <div id="chat">
+    <div id="chat-log"></div>
+    <div id="chat-input-row">
+      <span class="prompt">&gt;</span>
+      <textarea id="chat-input" rows="1" placeholder="Tell the AI: build a NOT gate…"></textarea>
+    </div>
+  </div>
+
+  <!-- Settings (API Key) -->
+  <details id="settings">
+    <summary>⚙️</summary>
+    <input id="apikey" type="password" placeholder="Anthropic API Key (leave blank = local mode)">
+    <input id="model" type="text" placeholder="Model, default claude-opus-4-8">
+    <p class="tip">Key is stored in memory only; refresh clears it.</p>
+  </details>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
