@@ -180,17 +180,28 @@ describe("arena tool handlers", () => {
     expect(list.tools).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "generate_shape", when: expect.any(String), ex: expect.any(String) }),
     ]));
+    const cards = list.tools as { name: string; when: string }[];
+    const whenByName = Object.fromEntries(cards.map((card) => [card.name, card.when]));
+    expect(whenByName.get_build_summary).toContain("totals");
+    expect(whenByName.query_blocks).toContain("state");
+    expect(whenByName.get_build_slices).toContain("dense 2D");
+    expect(whenByName.set_blocks).toContain("small precise");
+    expect(whenByName.generate_shape).toContain("repeated volumes");
+    expect(whenByName.transform_region).toContain("existing region");
+    expect(whenByName.render_build_views).toContain("no block data");
 
     const described = payload(handlers.describe_tools({ names: ["generate_shape", "set_blocks"] }));
     expect(described.tools).toHaveLength(2);
     expect(described.tools).toEqual([
       expect.objectContaining({
         name: "generate_shape",
+        when: expect.stringContaining("repeated volumes"),
         inputSchema: ARENA_TOOL_SCHEMAS.generate_shape,
       }),
       expect.objectContaining({
         name: "set_blocks",
         args: expect.stringContaining("expectedRevision"),
+        when: expect.stringContaining("small precise"),
         inputSchema: ARENA_TOOL_SCHEMAS.set_blocks,
       }),
     ]);

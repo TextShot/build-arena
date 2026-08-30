@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import exportIcon from "../assets/svg/export.svg";
+import importIcon from "../assets/svg/import.svg";
+import inventoryIcon from "../assets/svg/inventory.svg";
+import questionMarkIcon from "../assets/svg/question-mark.svg";
+import clearIcon from "../assets/svg/clear.svg";
 import type { ArenaEngine, ArenaResult, BuildSummary } from "../core/arena-engine";
 import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/arena-config";
 import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
@@ -60,11 +65,13 @@ export function BuildArenaPage() {
   ]);
   const [jsonDraft, setJsonDraft] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Click place \ndouble-click select\nRight-click remove");
+  const [statusMessage, setStatusMessage] = useState("");
   const [spaceReady, setSpaceReady] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [controlsHelpOpen, setControlsHelpOpen] = useState(false);
   const [inventoryEntries, setInventoryEntries] = useState(() => readInventory().entries);
   const nextActivityId = useRef(1);
+  const importInput = useRef<HTMLInputElement>(null);
   const rendererHost = useRef<HTMLDivElement>(null);
   const rendererInstance = useRef<ArenaRenderer | null>(null);
 
@@ -236,6 +243,27 @@ export function BuildArenaPage() {
     handleResult(result, type, "{}");
   };
 
+  const clearPlatform = () => {
+    if (blockLockedManualWrite()) return;
+    const result = engine.apply({
+      type: "clear_blocks",
+      expectedRevision: engine.getContext().revision,
+    });
+    handleResult(
+      result,
+      "clear",
+      JSON.stringify({ removed: result.success ? result.affectedBlocks : 0 }),
+    );
+    if (!result.success) {
+      setStatusMessage(result.error);
+      return;
+    }
+    useUiStore.getState().setSelectedCoordinate(null);
+    setStatusMessage(
+      result.affectedBlocks === 0 ? "Nothing to clear" : `Cleared ${result.affectedBlocks} blocks`,
+    );
+  };
+
   const applyReplace = (position: Coordinate, block: BlockId, state: BlockState) => {
     if (blockLockedManualWrite()) return;
     const result = engine.apply({
@@ -401,6 +429,19 @@ export function BuildArenaPage() {
     if (result.success) useUiStore.getState().setJsonMode(false);
   };
 
+  const importBlueprint = async (file: File | undefined) => {
+    if (!file) return;
+
+    try {
+      setJsonDraft(await file.text());
+      setJsonError(null);
+      useUiStore.getState().setJsonMode(true);
+      setStatusMessage("Blueprint loaded. Review and validate it before applying.");
+    } catch {
+      setStatusMessage("Could not read the blueprint file.");
+    }
+  };
+
   const toggleSidebar = () => {
     const store = useUiStore.getState();
     store.setSidebarCollapsed(!store.sidebarCollapsed);
@@ -427,11 +468,69 @@ export function BuildArenaPage() {
               Agent editing · Unlock
             </button>
           )}
-          <button className="export-button" onClick={exportBlueprint} type="button">Export</button>
-          <button aria-label="Undo" className="icon-button" data-flip="true" disabled={manualEditLockState.locked} onClick={() => applyHistory("undo")} title="Undo" type="button">
+          <button
+            aria-label="Import blueprint"
+            className="icon-button"
+            data-tooltip="Import"
+            onClick={() => importInput.current?.click()}
+            type="button"
+          >
+            <img alt="" src={importIcon} />
+          </button>
+          <input
+            accept=".json,.build-arena.json,application/json"
+            className="sr-only"
+            onChange={(event) => {
+              void importBlueprint(event.currentTarget.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+            ref={importInput}
+            type="file"
+          />
+          <button aria-label="Export blueprint" className="icon-button" data-tooltip="Export" onClick={exportBlueprint} type="button">
+            <img alt="" src={exportIcon} />
+          </button>
+          <button aria-label="Add to inventory" className="icon-button" data-tooltip="Inventory" onClick={saveToInventory} type="button">
+            <img alt="" src={inventoryIcon} />
+          </button>
+          <button
+            aria-controls="build-controls-help"
+            aria-expanded={controlsHelpOpen}
+            aria-label="Show build controls"
+            className="icon-button"
+            data-tooltip="Help"
+            onClick={() => setControlsHelpOpen((open) => !open)}
+            type="button"
+          >
+            <img alt="" src={questionMarkIcon} />
+          </button>
+          {controlsHelpOpen && (
+            <section aria-labelledby="build-controls-title" className="controls-help-popover" id="build-controls-help" role="dialog">
+              <div className="controls-help-heading">
+                <h2 id="build-controls-title">Build controls</h2>
+                <button aria-label="Close build controls" onClick={() => setControlsHelpOpen(false)} type="button">×</button>
+              </div>
+              <h3>Mouse</h3>
+              <ul>
+                <li><strong>Click</strong><span>Place block</span></li>
+                <li><strong>Double-click</strong><span>Select block</span></li>
+                <li><strong>Right-click</strong><span>Remove block</span></li>
+                <li><strong>Scroll</strong><span>Zoom in/out</span></li>
+                <li><strong>Clear</strong><span>Remove every block; Undo restores them</span></li>
+              </ul>
+
+              <h3>Keyboard</h3>
+              <ul>
+                <li><strong>R</strong><span>Rotate repeater or comparator</span></li>
+                <li><strong>M</strong><span>Change comparator mode</span></li>
+                <li><strong>]</strong><span>Toggle editor sidebar</span></li>
+              </ul>
+            </section>
+          )}
+          <button aria-label="Undo" className="icon-button" data-flip="true" data-tooltip="Undo" disabled={manualEditLockState.locked} onClick={() => applyHistory("undo")} type="button">
             <RedoIcon />
           </button>
-          <button aria-label="Redo" className="icon-button" disabled={manualEditLockState.locked} onClick={() => applyHistory("redo")} title="Redo" type="button">
+          <button aria-label="Redo" className="icon-button" data-tooltip="Redo" disabled={manualEditLockState.locked} onClick={() => applyHistory("redo")} type="button">
             <RedoIcon />
           </button>
           <button
@@ -440,12 +539,13 @@ export function BuildArenaPage() {
             aria-keyshortcuts="]"
             aria-label={sidebarCollapsed ? "Expand editor sidebar" : "Collapse editor sidebar"}
             className="icon-button sidebar-toggle"
+            data-tooltip="Sidebar"
             onClick={toggleSidebar}
-            title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
             type="button"
           >
             <SidebarToggleIcon />
           </button>
+          <button className="open-3d-button" data-tooltip="Play" onClick={() => goToPlaySpace("place")} type="button">Open in 3D</button>
         </div>
       </header>
 
@@ -470,8 +570,20 @@ export function BuildArenaPage() {
             ))}
           </div>
           <div className="renderer-host" ref={rendererHost} />
-          <div className="viewport-status" role="status" aria-live="polite">
-            <strong>{statusMessage}</strong>
+          <div className="viewport-chrome">
+            <div className="viewport-status" hidden={!statusMessage} role="status" aria-live="polite">
+              {statusMessage ? <strong>{statusMessage}</strong> : null}
+            </div>
+            <button
+              aria-label="Clear all blocks"
+              className="viewport-clear"
+              data-tooltip="Clear"
+              disabled={manualEditLockState.locked || summary.blockCount === 0}
+              onClick={clearPlatform}
+              type="button"
+            >
+              <img alt="" src={clearIcon} />
+            </button>
           </div>
           <BlockPalette
             onOpenInventory={() => {
@@ -540,10 +652,6 @@ export function BuildArenaPage() {
                         ))}
                       </ul>
                     )}
-                    <div className="layers-footer">
-                      <button onClick={saveToInventory} type="button">Add to inventory</button>
-                      <button onClick={() => goToPlaySpace("place")} type="button">Open in 3D</button>
-                    </div>
                   </section>
                 )}
 

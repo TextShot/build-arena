@@ -94,13 +94,20 @@ export type TransformRegionCommand = Readonly<{
   dryRun?: boolean;
 }>;
 
+/** Removes every occupied build cell in one history entry. The protected platform stays. */
+export type ClearBlocksCommand = Readonly<{
+  type: "clear_blocks";
+  expectedRevision: number;
+}>;
+
 /** Core cancellation is deferred; adapters may add it later. */
 export type ArenaCommand =
   | SetBlocksCommand
   | UndoCommand
   | RedoCommand
   | GenerateShapeCommand
-  | TransformRegionCommand;
+  | TransformRegionCommand
+  | ClearBlocksCommand;
 
 export type ArenaSuccess = Readonly<{
   success: true;

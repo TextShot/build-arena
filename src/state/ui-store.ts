@@ -40,7 +40,7 @@ export const DEFAULT_UI_STATE: UiState = Object.freeze({
   selectedBlock: "stone",
   selectedCoordinate: null,
   cameraPreset: "iso",
-  sidebarCollapsed: false,
+  sidebarCollapsed: true,
   activeSidebarPanel: "layers",
   jsonMode: false,
   platformSize: 51,

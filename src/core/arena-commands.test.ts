@@ -234,4 +234,24 @@ describe("arena commands", () => {
     });
     expect(result).toMatchObject({ success: false, revision: 2, fieldPath: "undoId" });
   });
+
+  it("clears every occupied cell in one undoable history entry", () => {
+    const engine = createArenaEngine();
+    engine.apply({
+      type: "set_blocks",
+      expectedRevision: 0,
+      edits: [
+        { action: "place", position: position(0), block: "stone" },
+        { action: "place", position: position(2, 3, -1), block: "glass" },
+      ],
+    });
+
+    const cleared = engine.apply({ type: "clear_blocks", expectedRevision: 1 });
+    expect(cleared).toMatchObject({ success: true, revision: 2, affectedBlocks: 2 });
+    expect(engine.snapshotBlocks()).toEqual([]);
+
+    const undo = engine.apply({ type: "undo", expectedRevision: 2 });
+    expect(undo).toMatchObject({ success: true, revision: 3, affectedBlocks: 2 });
+    expect(engine.snapshotBlocks()).toHaveLength(2);
+  });
 });

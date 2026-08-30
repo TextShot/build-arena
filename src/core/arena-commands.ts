@@ -3,6 +3,7 @@ import type {
   ArenaResult,
   BlockChange,
   BlockEdit,
+  ClearBlocksCommand,
   GenerateShapeCommand,
   TransformRegionCommand,
 } from "./arena-engine";
@@ -450,6 +451,24 @@ function executeTransformRegion(
   return commitOrDryRun(world, changes, revision, history, command.dryRun);
 }
 
+function executeClearBlocks(
+  world: MutableArenaWorld,
+  command: ClearBlocksCommand,
+  revision: number,
+  config: ArenaConfig,
+  history: HistoryManager,
+): CommandExecution {
+  const revisionFailure = validateExpectedRevision(command.expectedRevision, revision);
+  if (revisionFailure) return failed(revision, revisionFailure.error, revisionFailure.fieldPath);
+
+  const changes: BlockChange[] = [];
+  for (const { position, cell } of world.entries()) {
+    if (position.y <= config.platformY) continue;
+    changes.push(changeFor(position, cell, null));
+  }
+  return commitOrDryRun(world, changes, revision, history, false);
+}
+
 export function executeCommand(
   world: MutableArenaWorld,
   command: ArenaCommand,
@@ -464,5 +483,6 @@ export function executeCommand(
   if (command.type === "undo" || command.type === "redo") return executeHistory(world, command, revision, history);
   if (command.type === "generate_shape") return executeGenerateShape(world, command, revision, config, history);
   if (command.type === "transform_region") return executeTransformRegion(world, command, revision, config, history);
+  if (command.type === "clear_blocks") return executeClearBlocks(world, command, revision, config, history);
   return failed(revision, "Unknown arena command type", "type");
 }

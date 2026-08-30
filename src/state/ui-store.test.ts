@@ -25,7 +25,7 @@ describe("useUiStore", () => {
       selectedBlock: "stone",
       selectedCoordinate: null,
       cameraPreset: "iso",
-      sidebarCollapsed: false,
+      sidebarCollapsed: true,
       activeSidebarPanel: "layers",
       jsonMode: false,
       platformSize: 51,
@@ -78,6 +78,37 @@ describe("useUiStore", () => {
     getState().resetUiState();
 
     expect(pickUiState(getState())).toEqual(DEFAULT_UI_STATE);
+  });
+
+  it("persists sidebar collapsed so a later visit keeps the last state", () => {
+    const store: Record<string, string> = {};
+    const memory = {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => {
+        store[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete store[key];
+      },
+      clear: () => {
+        for (const key of Object.keys(store)) delete store[key];
+      },
+      key: () => null,
+      get length() {
+        return Object.keys(store).length;
+      },
+    };
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memory,
+    });
+
+    const { getState } = useUiStore;
+    getState().setSidebarCollapsed(false);
+    expect(memory.getItem("build-arena.sidebarCollapsed")).toBe("false");
+    getState().setSidebarCollapsed(true);
+    expect(memory.getItem("build-arena.sidebarCollapsed")).toBe("true");
   });
 
   it("keeps previous snapshots unchanged after an action", () => {
