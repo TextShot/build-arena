@@ -547,7 +547,7 @@ export function BuildArenaPage() {
           >
             <SidebarToggleIcon />
           </button>
-          <button className="open-3d-button" data-tooltip="Play" onClick={() => goToPlaySpace("place")} type="button">Open in Minecraft</button>
+          <button className="open-3d-button" data-tooltip="Play" onClick={() => goToPlaySpace("place")} type="button">Open in 3D World</button>
         </div>
       </header>
 
