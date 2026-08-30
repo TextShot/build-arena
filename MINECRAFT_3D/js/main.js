@@ -429,10 +429,9 @@ addEventListener("keydown", (e) => {
     showPauseMenu();
     return;
   }
-  if (!world.locked()) {
-    e.preventDefault();
-    showPauseMenu();
-  }
+  e.preventDefault();
+  if (world.locked()) world.unlock();
+  else showPauseMenu();
 });
 
 const toolAbort = new AbortController();

@@ -40,7 +40,7 @@ export type StorageWrite = Readonly<{ ok: true }> | Readonly<{ ok: false; error:
 const EMPTY_FILE: InventoryFile = Object.freeze({ version: 1, entries: [] });
 const QUOTA_ERROR = "Inventory is full (browser storage quota)";
 
-/** Keep Arena x/z so Open in 3D lands on the same platform cells. */
+/** Keep Arena x/z so Open in Minecraft lands on the same platform cells. */
 export function toArenaBlocks(blocks: readonly Block[]): InventoryBlock[] {
   return blocks.map((block) => {
     const item: InventoryBlock = {
