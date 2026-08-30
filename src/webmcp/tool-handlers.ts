@@ -3,11 +3,14 @@ import Ajv, { type ValidateFunction } from "ajv";
 import type { ArenaEngine, GenerateShapeCommand } from "../core/arena-engine";
 import { createBlueprint } from "../core/blueprint";
 import { parsePatternDsl } from "../core/pattern-dsl";
-import { ARENA_TOOL_SCHEMAS, type ArenaToolName } from "./tool-schemas";
+import type { ManualEditLock } from "./manual-edit-lock";
+import { ARENA_MUTATION_TOOLS, ARENA_TOOL_SCHEMAS, type ArenaToolName } from "./tool-schemas";
 import { arenaResultToolResult, errorToolResult, jsonToolResult } from "./tool-results";
 import type { ToolCallResult } from "./webmcp-types";
 
 export type ArenaToolHooks = Readonly<{
+  /** Shared page lock that blocks human writes while the agent edits. */
+  manualEditLock?: ManualEditLock;
   /** Called after every tool call so the UI can show agent activity. */
   onToolCall?: (name: ArenaToolName, success: boolean, revision: number, payload: string) => void;
   /** Called when render_build_views asks the visible viewport to change. */
@@ -47,9 +50,22 @@ export function createArenaToolHandlers(
   const validators = getValidators();
   const run = (name: ArenaToolName, handler: (args: Record<string, unknown>) => ToolCallResult): ArenaToolHandler =>
     (args: unknown): ToolCallResult => {
+      hooks.manualEditLock?.refresh();
       const validate = validators.get(name);
       if (validate && !validate(args ?? {})) {
         const result = schemaError(name, validate);
+        hooks.onToolCall?.(name, false, engine.getContext().revision, result.content[0]?.text ?? "{}");
+        return result;
+      }
+      if (
+        ARENA_MUTATION_TOOLS.includes(name) &&
+        !hooks.manualEditLock?.getSnapshot().locked
+      ) {
+        const result = errorToolResult(
+          "Lock manual editing before changing the arena",
+          undefined,
+          engine.getContext().revision,
+        );
         hooks.onToolCall?.(name, false, engine.getContext().revision, result.content[0]?.text ?? "{}");
         return result;
       }
@@ -77,6 +93,7 @@ export function createArenaToolHandlers(
           oak_trapdoor: ["facing", "half", "open"],
         },
         limits: context.limits,
+        manualEditLock: hooks.manualEditLock?.getSnapshot() ?? { locked: false, expiresAt: null },
         sizeControl: "Arena platform/height sizing is human-only via the UI sliders; agents read bounds but cannot resize",
       });
     }),
@@ -87,6 +104,17 @@ export function createArenaToolHandlers(
 
     get_build_slices: run("get_build_slices", (args) =>
       jsonToolResult(engine.getSlice(args as { axis: "x" | "y" | "z"; index: number }))),
+
+    set_manual_edit_lock: run("set_manual_edit_lock", (args) => {
+      const lock = hooks.manualEditLock;
+      if (!lock) return errorToolResult("Manual edit lock is unavailable");
+      const state = lock.setLocked(args.locked as boolean);
+      return jsonToolResult({
+        success: true,
+        revision: engine.getContext().revision,
+        manualEditLock: state,
+      });
+    }),
 
     set_blocks: run("set_blocks", (args) =>
       arenaResultToolResult(engine.apply({

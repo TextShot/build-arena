@@ -39,4 +39,17 @@ describe("manual edit lock", () => {
 
     expect(lock.getSnapshot()).toMatchObject({ locked: false, expiresAt: null });
   });
+
+  it("notifies subscribers on lock and unlock, but not on refresh", () => {
+    const lock = createManualEditLock();
+    const snapshots: Array<{ locked: boolean }> = [];
+    lock.subscribe((snapshot) => snapshots.push({ locked: snapshot.locked }));
+
+    lock.setLocked(true);
+    lock.refresh();
+    lock.setLocked(false);
+
+    expect(snapshots).toEqual([{ locked: true }, { locked: false }]);
+    expect(lock.getSnapshot().locked).toBe(false);
+  });
 });

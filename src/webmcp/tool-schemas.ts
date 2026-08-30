@@ -120,6 +120,18 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
       index: { type: "integer", minimum: -MAX_RADIUS, maximum: MAX_BUILD_HEIGHT, description: "The fixed coordinate on that axis." },
     },
   },
+  set_manual_edit_lock: {
+    type: "object",
+    description: "Lock human arena writes before agent mutations, then unlock when finished. Reads do not require the lock. The lock expires five minutes after the last agent tool call.",
+    additionalProperties: false,
+    required: ["locked"],
+    properties: {
+      locked: {
+        type: "boolean",
+        description: "True before set_blocks, undo_build_change, generate_shape, or transform_region; false when finished. get_arena_context, queries, slices, and render_build_views work unlocked.",
+      },
+    },
+  },
   set_blocks: {
     type: "object",
     description: "Apply up to 256 exact edits atomically: place on empty cells, replace occupied cells, remove blocks.",
@@ -288,6 +300,13 @@ export type ArenaToolName = keyof typeof ARENA_TOOL_SCHEMAS;
 export const ARENA_TOOL_NAMES = Object.freeze(
   Object.keys(ARENA_TOOL_SCHEMAS) as ArenaToolName[],
 );
+
+export const ARENA_MUTATION_TOOLS: readonly ArenaToolName[] = Object.freeze([
+  "set_blocks",
+  "undo_build_change",
+  "generate_shape",
+  "transform_region",
+]);
 
 export const READ_ONLY_TOOLS: readonly ArenaToolName[] = Object.freeze([
   "get_arena_context",

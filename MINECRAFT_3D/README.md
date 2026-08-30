@@ -1,4 +1,10 @@
 # Redstone World
+     |
+     +-- landscape (walk, place cubes)     
+     |
+     +-- redstone computer parts           --> LimeStone rules + redstone-world list
+     |
+     +-- pictures / sounds                
 
 A web-based (Three.js) recreation of Minecraft's **redstone sandbox**: first-person exploration, pixel block textures, realistic redstone signal simulation, and the classic chat box repurposed as an **AI dialogue** window — describe circuits in natural language and the AI, constrained by a sandbox, **can only place redstone blocks**.
 

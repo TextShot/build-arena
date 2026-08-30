@@ -45,7 +45,7 @@ describe("arena tool schemas", () => {
     }
   });
 
-  it("requires expectedRevision on every write tool", () => {
+  it("requires expectedRevision on every arena mutation tool", () => {
     expect(ARENA_MUTATION_TOOLS).toEqual(["set_blocks", "undo_build_change", "generate_shape", "transform_region"]);
     for (const name of ARENA_MUTATION_TOOLS) {
       const schema = ARENA_TOOL_SCHEMAS[name] as {

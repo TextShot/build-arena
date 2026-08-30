@@ -68,7 +68,7 @@ describe("arena tool handlers", () => {
   });
 
   it("save_blueprint returns a canonical schemaVersion 2 blueprint", () => {
-    const { engine, handlers } = testHandlers();
+    const { handlers } = testHandlers();
     handlers.set_manual_edit_lock({ locked: true });
     handlers.set_blocks({
       expectedRevision: 0,
@@ -181,7 +181,7 @@ describe("arena tool handlers", () => {
     expect(payload(handlers.set_manual_edit_lock({ locked: true }))).toMatchObject({
       success: true,
       revision: 0,
-      manualEditsLocked: true,
+      manualEditLock: { locked: true },
     });
     expect(payload(handlers.set_blocks(edit))).toMatchObject({ success: true, revision: 1 });
 

@@ -6,6 +6,7 @@ import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
 import { ArenaRenderer } from "../render/three-renderer";
+import { createManualEditLock } from "../webmcp/manual-edit-lock";
 import { registerArenaTools } from "../webmcp/register-arena-tools";
 import { type CameraPreset, type SidebarPanel, useUiStore } from "../state/ui-store";
 import {
@@ -32,6 +33,8 @@ const SIDEBAR_PANELS: readonly SidebarPanel[] = ["layers", "activity", "slider"]
 
 export function BuildArenaPage() {
   const [engine] = useState(() => createArenaEngine(createArenaConfig(51, 31)));
+  const [manualEditLock] = useState(() => createManualEditLock());
+  const [manualEditLockState, setManualEditLockState] = useState(() => manualEditLock.getSnapshot());
   const [summary, setSummary] = useState<BuildSummary>(() => engine.getSummary());
   const [activity, setActivity] = useState<readonly ActivityEntry[]>(() => [
     {
@@ -76,6 +79,19 @@ export function BuildArenaPage() {
     setSummary(engine.getSummary());
   }), [engine]);
 
+  useEffect(() => manualEditLock.subscribe((snapshot) => {
+    setManualEditLockState(snapshot);
+    setStatusMessage(snapshot.locked ? "Agent is editing the arena" : "Manual editing unlocked");
+  }), [manualEditLock]);
+
+  useEffect(() => () => manualEditLock.dispose(), [manualEditLock]);
+
+  const blockLockedManualWrite = useCallback(() => {
+    if (!manualEditLock.getSnapshot().locked) return false;
+    setStatusMessage("Agent is editing. Use Unlock in the top bar to take control.");
+    return true;
+  }, [manualEditLock]);
+
   const inspectCell = useCallback((coordinate: Coordinate) => {
     useUiStore.getState().setSelectedCoordinate(coordinate);
     const occupant = blockAt(engine, coordinate);
@@ -83,6 +99,7 @@ export function BuildArenaPage() {
   }, [engine]);
 
   const placeCell = useCallback((coordinate: Coordinate) => {
+    if (blockLockedManualWrite()) return;
     const block = useUiStore.getState().selectedBlock;
     const result = engine.apply({
       type: "set_blocks",
@@ -101,9 +118,10 @@ export function BuildArenaPage() {
     });
     if (result.success) setStatusMessage(formatCoord(coordinate));
     else setStatusMessage(result.error);
-  }, [addActivity, engine]);
+  }, [addActivity, blockLockedManualWrite, engine]);
 
   const removeCell = useCallback((coordinate: Coordinate) => {
+    if (blockLockedManualWrite()) return;
     const result = engine.apply({
       type: "set_blocks",
       expectedRevision: engine.getContext().revision,
@@ -121,7 +139,7 @@ export function BuildArenaPage() {
     });
     if (result.success) setStatusMessage(formatCoord(coordinate));
     else setStatusMessage(result.error);
-  }, [addActivity, engine]);
+  }, [addActivity, blockLockedManualWrite, engine]);
 
   useEffect(() => {
     const host = rendererHost.current;
@@ -156,13 +174,14 @@ export function BuildArenaPage() {
     void registerArenaTools(engine, {
       signal: controller.signal,
       hooks: {
+        manualEditLock,
         onToolCall: (name, success, revision, payload) =>
           addActivity({ actor: "agent", name, success, revision, payload }),
         onRenderView: (view) => useUiStore.getState().setCameraPreset(view),
       },
     });
     return () => controller.abort();
-  }, [addActivity, engine]);
+  }, [addActivity, engine, manualEditLock]);
 
   const currentBlocks = useMemo(
     () => engine.snapshotBlocks(),
@@ -193,11 +212,13 @@ export function BuildArenaPage() {
   };
 
   const applyHistory = (type: "undo" | "redo") => {
+    if (blockLockedManualWrite()) return;
     const result = engine.apply({ type, expectedRevision: engine.getContext().revision });
     handleResult(result, type, "{}");
   };
 
   const resizePlatform = (nextSize: number) => {
+    if (blockLockedManualWrite()) return;
     const result = engine.resizePlatform(nextSize);
     handleResult(result, "platform.resize", JSON.stringify({ size: nextSize }));
     if (!result.success) return;
@@ -209,6 +230,7 @@ export function BuildArenaPage() {
   };
 
   const resizeHeight = (nextHeight: number) => {
+    if (blockLockedManualWrite()) return;
     const result = engine.resizeHeight(nextHeight);
     handleResult(result, "height.resize", JSON.stringify({ height: nextHeight }));
     if (!result.success) return;
@@ -259,6 +281,7 @@ export function BuildArenaPage() {
   };
 
   const validateAndApplyJson = () => {
+    if (blockLockedManualWrite()) return;
     const parsed = parseBlueprintJson(jsonDraft, engine.getContext().bounds);
     if (!parsed.success) {
       setJsonError(parsed.error);
@@ -311,11 +334,20 @@ export function BuildArenaPage() {
           <button aria-current="page" type="button">Build Arena</button>
         </nav>
         <div className="topbar-actions">
+          {manualEditLockState.locked && (
+            <button
+              className="agent-lock-button"
+              onClick={() => manualEditLock.setLocked(false)}
+              type="button"
+            >
+              Agent editing · Unlock
+            </button>
+          )}
           <button className="export-button" onClick={exportBlueprint} type="button">Export</button>
-          <button aria-label="Undo" className="icon-button" data-flip="true" onClick={() => applyHistory("undo")} title="Undo" type="button">
+          <button aria-label="Undo" className="icon-button" data-flip="true" disabled={manualEditLockState.locked} onClick={() => applyHistory("undo")} title="Undo" type="button">
             <RedoIcon />
           </button>
-          <button aria-label="Redo" className="icon-button" onClick={() => applyHistory("redo")} title="Redo" type="button">
+          <button aria-label="Redo" className="icon-button" disabled={manualEditLockState.locked} onClick={() => applyHistory("redo")} title="Redo" type="button">
             <RedoIcon />
           </button>
           <button
@@ -373,7 +405,7 @@ export function BuildArenaPage() {
                   <h2 id="json-editor-title">JSON editor</h2>
                 </div>
                 <div className="json-editor-actions">
-                  <button onClick={validateAndApplyJson} type="button">Validate and apply</button>
+                  <button disabled={manualEditLockState.locked} onClick={validateAndApplyJson} type="button">Validate and apply</button>
                   <button className="text-button" onClick={() => setJsonMode(false)} type="button">Back</button>
                 </div>
               </div>
@@ -438,6 +470,7 @@ export function BuildArenaPage() {
                   <section aria-label="Arena dimensions" className="slider-stack">
                     <OddSlider
                       ariaLabel="Platform width"
+                      disabled={manualEditLockState.locked}
                       max={MAX_PLATFORM_SIZE}
                       min={7}
                       onChange={resizePlatform}
@@ -445,6 +478,7 @@ export function BuildArenaPage() {
                     />
                     <OddSlider
                       ariaLabel="Build height"
+                      disabled={manualEditLockState.locked}
                       max={MAX_BUILD_HEIGHT}
                       min={7}
                       onChange={resizeHeight}
@@ -516,12 +550,14 @@ function JsonPane({
 
 function OddSlider({
   ariaLabel,
+  disabled,
   max,
   min,
   value,
   onChange,
 }: {
   ariaLabel: string;
+  disabled?: boolean;
   max: number;
   min: number;
   value: number;
@@ -531,6 +567,7 @@ function OddSlider({
     <input
       aria-label={ariaLabel}
       className="odd-slider"
+      disabled={disabled}
       max={max}
       min={min}
       onChange={(event) => onChange(Number(event.target.value))}
