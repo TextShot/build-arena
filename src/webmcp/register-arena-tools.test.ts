@@ -74,6 +74,14 @@ describe("registerArenaTools", () => {
     expect([...tools.keys()].some((name) => name.includes("resize"))).toBe(false);
   });
 
+  it("leaves blueprint export to the human UI", async () => {
+    const { modelContext, tools } = fakeModelContext();
+    const controller = new AbortController();
+    await registerArenaTools(createArenaEngine(), { signal: controller.signal, modelContext });
+
+    expect(tools.has("save_blueprint")).toBe(false);
+  });
+
   it("removes registrations when the AbortController aborts", async () => {
     const engine = createArenaEngine();
     const { modelContext, tools } = fakeModelContext();

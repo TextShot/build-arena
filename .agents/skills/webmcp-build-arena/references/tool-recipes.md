@@ -231,12 +231,6 @@ Ops: `copy`, `move`, `rotate`, `mirror`, `replace_type`. Right-angle rotates onl
 
 ---
 
-## 11. `save_blueprint` (write, after a valid build)
-
-Validate, serialize JSON, thumbnail metadata. Same schema as `src/schemas/blueprint.schema.ts`.
-
----
-
 ## Register helper
 
 ```ts

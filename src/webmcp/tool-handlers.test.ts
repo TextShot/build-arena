@@ -69,25 +69,6 @@ describe("arena tool handlers", () => {
     expect(engine.getSummary().blockCount).toBe(0);
   });
 
-  it("save_blueprint returns a canonical schemaVersion 2 blueprint", () => {
-    const { handlers } = testHandlers();
-    handlers.set_manual_edit_lock({ locked: true });
-    handlers.set_blocks({
-      expectedRevision: 0,
-      edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "obsidian" }],
-    });
-
-    const saved = payload(handlers.save_blueprint({ name: "Tower" }));
-    expect(saved).toMatchObject({
-      revision: 1,
-      blueprint: {
-        schemaVersion: 2,
-        name: "Tower",
-        blockSummary: { obsidian: 1 },
-      },
-    });
-  });
-
   it("generate_shape accepts the compact DSL and groups the result", () => {
     const engine = createArenaEngine(createArenaConfig(11));
     const { handlers } = testHandlers(engine);
@@ -192,7 +173,7 @@ describe("arena tool handlers", () => {
     expect(engine.getContext().revision).toBe(1);
   });
 
-  it("lists a short catalog and describes one tool on request", () => {
+  it("lists a short catalog and describes unique tools in requested order", () => {
     const { handlers } = testHandlers();
     const list = payload(handlers.list_tools({}));
     expect(list.loop).toEqual(expect.stringContaining("lock"));
@@ -200,9 +181,13 @@ describe("arena tool handlers", () => {
       expect.objectContaining({ name: "generate_shape", when: expect.any(String), ex: expect.any(String) }),
     ]));
 
-    const one = payload(handlers.describe_tools({ name: "set_blocks" }));
-    expect(one.tools).toHaveLength(1);
-    expect(one.tools).toEqual([
+    const described = payload(handlers.describe_tools({ names: ["generate_shape", "set_blocks"] }));
+    expect(described.tools).toHaveLength(2);
+    expect(described.tools).toEqual([
+      expect.objectContaining({
+        name: "generate_shape",
+        inputSchema: ARENA_TOOL_SCHEMAS.generate_shape,
+      }),
       expect.objectContaining({
         name: "set_blocks",
         args: expect.stringContaining("expectedRevision"),
@@ -211,5 +196,6 @@ describe("arena tool handlers", () => {
     ]);
 
     expect(handlers.describe_tools({}).isError).toBe(true);
+    expect(handlers.describe_tools({ names: ["set_blocks", "set_blocks"] }).isError).toBe(true);
   });
 });

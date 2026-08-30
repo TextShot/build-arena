@@ -1,7 +1,7 @@
 /** Short cards for list_tools. Keep strings tiny — this payload is meant to be cheap. */
 export const LIST_TOOL_CARDS = Object.freeze([
   Object.freeze({ name: "list_tools", when: "this catalog", ex: "{}" }),
-  Object.freeze({ name: "describe_tools", when: "args + examples", ex: "{name:\"set_blocks\"}" }),
+  Object.freeze({ name: "describe_tools", when: "args + examples", ex: "{names:[\"set_blocks\",\"generate_shape\"]}" }),
   Object.freeze({ name: "get_arena_context", when: "bounds, revision, block ids", ex: "{}" }),
   Object.freeze({ name: "get_build_summary", when: "counts + occupied box", ex: "{}" }),
   Object.freeze({ name: "query_blocks", when: "exact cells", ex: "{layerY:1,limit:50}" }),
@@ -11,7 +11,6 @@ export const LIST_TOOL_CARDS = Object.freeze([
   Object.freeze({ name: "transform_region", when: "copy/move/rotate/mirror/replace", ex: "{expectedRevision:0,operation:\"move\",region:{min:{x:0,y:1,z:0},max:{x:0,y:1,z:0}},offset:{x:2,y:0,z:0}}" }),
   Object.freeze({ name: "set_blocks", when: "≤256 exact edits", ex: "{expectedRevision:0,edits:[{action:\"place\",position:{x:0,y:1,z:0},block:\"stone\"}]}" }),
   Object.freeze({ name: "undo_build_change", when: "undo last write", ex: "{expectedRevision:1}" }),
-  Object.freeze({ name: "save_blueprint", when: "canonical JSON snapshot", ex: "{name:\"House\"}" }),
   Object.freeze({ name: "render_build_views", when: "human camera only", ex: "{view:\"top\"}" }),
 ]);
 
@@ -28,12 +27,12 @@ const DETAILED_BY_NAME: Readonly<Record<ListCard["name"], Readonly<{
   list_tools: {
     args: "{}",
     example: "{}",
-    when: "Start here. Cheap names/when/ex. Use describe_tools for one tool's args.",
+    when: "Start here. Cheap names/when/ex. Use describe_tools for selected tools' args.",
   },
   describe_tools: {
-    args: "{name}",
-    example: "{name:\"generate_shape\"}",
-    when: "Need one tool's full input schema and example.",
+    args: "{names[1..10 unique]}",
+    example: "{names:[\"generate_shape\",\"set_blocks\"]}",
+    when: "Need full input schemas and examples for up to 10 unique tools.",
   },
   get_arena_context: {
     args: "{}",
@@ -80,11 +79,6 @@ const DETAILED_BY_NAME: Readonly<Record<ListCard["name"], Readonly<{
     example: "{expectedRevision:1}",
     when: "Undo the latest eligible write.",
   },
-  save_blueprint: {
-    args: "{id?,name?}",
-    example: "{name:\"House\"}",
-    when: "Canonical schemaVersion 2 JSON. Download stays human UI.",
-  },
   render_build_views: {
     args: "{view?}",
     example: "{view:\"top\"}",
@@ -97,13 +91,15 @@ export function listToolsPayload(): Readonly<{ loop: string; tools: typeof LIST_
 }
 
 export function describeToolsPayload(
-  name: ListCard["name"],
-  inputSchema: object,
+  names: readonly ListCard["name"][],
+  inputSchemas: Readonly<Record<ListCard["name"], object>>,
 ): Readonly<{ tools: readonly object[] }> {
   return Object.freeze({
-    tools: Object.freeze([
-      Object.freeze({ name, ...DETAILED_BY_NAME[name], inputSchema }),
-    ]),
+    tools: Object.freeze(names.map((name) => Object.freeze({
+      name,
+      ...DETAILED_BY_NAME[name],
+      inputSchema: inputSchemas[name],
+    }))),
   });
 }
 

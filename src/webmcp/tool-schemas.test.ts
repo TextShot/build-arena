@@ -16,7 +16,7 @@ describe("arena tool schemas", () => {
   it("rejects additional properties on every tool", () => {
     const validArgs: Record<string, object> = {
       list_tools: {},
-      describe_tools: { name: "set_blocks" },
+      describe_tools: { names: ["set_blocks"] },
       get_arena_context: {},
       get_build_summary: {},
       query_blocks: {},
@@ -27,7 +27,6 @@ describe("arena tool schemas", () => {
         edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "stone" }],
       },
       undo_build_change: { expectedRevision: 1 },
-      save_blueprint: {},
       generate_shape: {
         expectedRevision: 0,
         pattern: "oak_planks_1@0,1,0-(x5)",
@@ -48,11 +47,28 @@ describe("arena tool schemas", () => {
     }
   });
 
-  it("requires one tool name for describe_tools", () => {
+  it("accepts 1-10 unique tool names for describe_tools", () => {
     const validate = ajv.compile(ARENA_TOOL_SCHEMAS.describe_tools);
+    const tenNames = [
+      "list_tools",
+      "describe_tools",
+      "get_arena_context",
+      "get_build_summary",
+      "query_blocks",
+      "get_build_slices",
+      "set_manual_edit_lock",
+      "generate_shape",
+      "transform_region",
+      "set_blocks",
+    ];
 
     expect(validate({})).toBe(false);
-    expect(validate({ name: "set_blocks" })).toBe(true);
+    expect(validate({ names: [] })).toBe(false);
+    expect(validate({ names: ["set_blocks"] })).toBe(true);
+    expect(validate({ names: tenNames })).toBe(true);
+    expect(validate({ names: [...tenNames, "undo_build_change"] })).toBe(false);
+    expect(validate({ names: ["set_blocks", "set_blocks"] })).toBe(false);
+    expect(validate({ name: "set_blocks" })).toBe(false);
   });
 
   it("requires expectedRevision on every arena mutation tool", () => {

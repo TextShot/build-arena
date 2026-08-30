@@ -96,14 +96,20 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   },
   describe_tools: {
     type: "object",
-    description: "Detailed args, example, and full input schema for one tool. Pass exactly one name.",
+    description: "Detailed args, examples, and full input schemas for 1-10 unique tools.",
     additionalProperties: false,
-    required: ["name"],
+    required: ["names"],
     properties: {
-      name: {
-        type: "string",
-        enum: DESCRIBE_TOOLS_NAME_ENUM,
-        description: "Tool to describe.",
+      names: {
+        type: "array",
+        minItems: 1,
+        maxItems: 10,
+        uniqueItems: true,
+        description: "Unique tool names to describe, returned in this order.",
+        items: {
+          type: "string",
+          enum: DESCRIBE_TOOLS_NAME_ENUM,
+        },
       },
     },
   },
@@ -188,15 +194,6 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
     properties: {
       expectedRevision,
       undoId: { type: "string", minLength: 1, maxLength: 100, description: "Optional guard: only undo when this is still the latest eligible entry." },
-    },
-  },
-  save_blueprint: {
-    type: "object",
-    description: "Validate and return the current build as a canonical schemaVersion 2 blueprint. Downloading stays a human UI action.",
-    additionalProperties: false,
-    properties: {
-      id: { type: "string", minLength: 1, maxLength: 100, description: "Blueprint id. Defaults to arena-build." },
-      name: { type: "string", minLength: 1, maxLength: 100, description: "Blueprint display name. Defaults to Arena Build." },
     },
   },
   generate_shape: {

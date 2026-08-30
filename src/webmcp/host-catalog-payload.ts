@@ -12,7 +12,7 @@ export type HostToolDescriptor = Omit<ToolDescriptor, "execute" | "name"> & Read
 
 export const HOST_INPUT_STUB = Object.freeze({
   type: "object",
-  description: "Full args: describe_tools({name}).",
+  description: "Full args: describe_tools({names}).",
   additionalProperties: true,
   properties: Object.freeze({}),
 } as const);
@@ -27,7 +27,7 @@ function describeTool(name: ArenaToolName): string {
   const description = schema.description ?? name;
   return DISCOVERY_TOOLS.includes(name)
     ? description
-    : `${description} First call describe_tools({name:"${name}"}).`;
+    : `${description} First call describe_tools({names:["${name}"]}).`;
 }
 
 export function buildHostToolDescriptors(

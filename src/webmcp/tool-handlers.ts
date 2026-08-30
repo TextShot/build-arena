@@ -1,7 +1,6 @@
 import Ajv, { type ValidateFunction } from "ajv";
 
 import type { ArenaEngine, GenerateShapeCommand } from "../core/arena-engine";
-import { createBlueprint } from "../core/blueprint";
 import { parsePatternDsl } from "../core/pattern-dsl";
 import type { ManualEditLock } from "./manual-edit-lock";
 import { describeToolsPayload, listToolsPayload } from "./tool-catalog";
@@ -96,15 +95,15 @@ export function createArenaToolHandlers(
         limits: context.limits,
         manualEditLock: hooks.manualEditLock?.getSnapshot() ?? { locked: false, expiresAt: null },
         sizeControl: "Arena platform/height sizing is human-only via the UI sliders; agents read bounds but cannot resize",
-        toolUse: "Call list_tools for the short catalog. Call describe_tools for args and examples.",
+        toolUse: "Call list_tools for the short catalog. Call describe_tools with 1-10 unique names for full args and examples.",
       });
     }),
 
     list_tools: run("list_tools", () => jsonToolResult(listToolsPayload())),
 
     describe_tools: run("describe_tools", (args) => {
-      const name = args.name as ArenaToolName;
-      return jsonToolResult(describeToolsPayload(name, ARENA_TOOL_SCHEMAS[name]));
+      const names = args.names as ArenaToolName[];
+      return jsonToolResult(describeToolsPayload(names, ARENA_TOOL_SCHEMAS));
     }),
 
     get_build_summary: run("get_build_summary", () => jsonToolResult(engine.getSummary())),
@@ -138,14 +137,6 @@ export function createArenaToolHandlers(
         expectedRevision: args.expectedRevision as number,
         ...(args.undoId !== undefined ? { undoId: args.undoId as string } : {}),
       }))),
-
-    save_blueprint: run("save_blueprint", (args) => {
-      const blueprint = createBlueprint(engine.snapshotBlocks(), {
-        id: (args.id as string | undefined) ?? "arena-build",
-        name: (args.name as string | undefined) ?? "Arena Build",
-      });
-      return jsonToolResult({ revision: engine.getContext().revision, blueprint });
-    }),
 
     generate_shape: run("generate_shape", (args) => {
       const expectedRevision = args.expectedRevision as number;

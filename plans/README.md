@@ -16,13 +16,15 @@ Use these names in code, comments, and UI copy. Do not invent synonyms.
 - **Inventory** — `localStorage` key `build-arena.inventory.v1`. A list of saved builds: relative blocks, `platformSize`, thumbnail. Shared by Arena and Play Space (same origin).
 - **Handoff** — one-shot `localStorage` key `build-arena.handoff.v1`. Written just before navigating to the Play Space; Play Space reads and deletes it.
 - **Transplant** — map Inventory/Handoff blocks onto Play Space `world.place`. Relative XZ from the click (min-corner). `worldY = arenaY - 1` so Arena `y = 1` sits on the grass.
-- **Sandbox** — `MINECRAFT_3D/js/agent.js` `runPlan`. Whitelist + integer coords + max 200 actions. The lock that WebMCP tools must wrap; do not bypass it.
+- **Sandbox** — `MINECRAFT_3D/js/agent.js` `runPlan`. Whitelist + integer coords + max 200 actions. Partial apply (skips bad actions). Fast agent path on the Play Space.
+- **Circuit Desk** — Play Space HUD (key **B**). Validated draft + ghosts + player Apply/Discard. Agent tool `propose_world_edit` fills the draft and must not call `runPlan`. Planned in `plans/004-circuit-desk.md`.
 
 ## Grilled decisions (do not re-open)
 
 - Redstone in the Arena is visual-only, but repeaters/comparators store orientation so a circuit can replay in the Play Space.
 - Play Space hotbar stays the original 10 redstone types plus a 3-dot Inventory slot. Arena-only blocks arrive by placing a Blueprint, not by expanding the hotbar.
 - Same-tab navigation through the Vite server (`/` ↔ `/MINECRAFT_3D/index.html`).
+- Circuit Desk is Play Space only. Keep `run_build_plan` (immediate, partial). Add `propose_world_edit` (draft only). Do not make `runPlan` atomic in 004.
 
 ## Execution order & status
 
@@ -31,6 +33,7 @@ Use these names in code, comments, and UI copy. Do not invent synonyms.
 | 001 | Merge the block Catalogue both ways | P1 | M | — | DONE |
 | 002 | Inventory, thumbnails, Arena UI | P1 | M | 001 | DONE |
 | 003 | Play Space: drop Claude, WebMCP, place builds | P1 | L | 002 | DONE |
+| 004 | Play Space Circuit Desk (drafts + propose_world_edit) | P1 | L | 003 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED
 
@@ -38,6 +41,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 
 - 002 needs the Redstone kit ids and default state helper from 001, or `placeCell` will fail `normalizeBlockState` when the user picks a repeater.
 - 003 needs the Inventory/Handoff JSON shape from 002. Do not invent a second schema.
+- 004 needs 003's Play Space WebMCP and `runPlan`. It adds a reviewed draft path; it must not delete `run_build_plan`.
 - Do not start 003 before 001: Play Space `world.place` rejects unknown ids, so a transplanted oak plank would silently fail.
 
 ## Findings considered and rejected
@@ -47,7 +51,10 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - Embedding the Play Space in an iframe: user chose same-tab navigation.
 - Deleting `MINECRAFT_3D/js/ai.js`: user forbade it. Strip the Anthropic fetch; keep the file as the Play Space WebMCP module.
 - Adding a repo `lint` script: there is none (`package.json` has `typecheck` and `test` only). Do not run `npm run lint`.
-- Rewriting from `docs/` or `MY_plan.md`: those are stale early-project notes (`.agents/rules/stale-early-docs.md`). Code and these plans win.
+- Making `runPlan` atomic in 004: user chose keep `run_build_plan` *and* add `propose_world_edit`. Atomic sandbox is a later plan if partial builds hurt.
+- Circuit Desk on the Arena: Arena already has revisioned `set_blocks`. Desk is first-person + `simulate()`.
+- Palette id `supports`: not a Catalogue key; 004 uses `stone`.
+- Ignoring `docs/purpose_builder.md` after 004 step 1: that file is promoted to the canonical brief and pointed at `plans/004-circuit-desk.md`.
 
 ## Suggested executor toolkit
 
