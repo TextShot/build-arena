@@ -44,6 +44,33 @@ html, body { margin: 0; height: 100%; overflow: hidden;
 #crosshair { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
   color: #fff; font-size: 26px; mix-blend-mode: difference; pointer-events: none; z-index: 5; }
 
+#look-pad {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 15;
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-areas: ". up ." "left down right";
+  gap: 4px;
+  pointer-events: none;
+}
+#look-pad [data-look] {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: 2px solid #d8e9dd;
+  background: rgb(12 24 20 / 86%);
+  color: #fff;
+  font: 700 24px/1 "Courier New", monospace;
+}
+#look-pad [data-look].is-pressed { background: rgb(49 96 64 / 96%); }
+#look-pad [data-look="up"] { grid-area: up; }
+#look-pad [data-look="left"] { grid-area: left; }
+#look-pad [data-look="down"] { grid-area: down; }
+#look-pad [data-look="right"] { grid-area: right; }
+
 #blocker { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
   background: rgba(0,0,0,.45); z-index: 20; cursor: pointer; }
 #blocker.is-open { display: flex; }

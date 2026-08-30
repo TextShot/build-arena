@@ -2,6 +2,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { PointerLockControls } from '../vendor/PointerLockControls.js';
 import { BLOCKS, simulate } from './blocks.js';
+import { applyLookDelta, lookDeltaFromKeys } from './look.js';
 import { faceMaterials, dustMaterial } from './textures.js';
 
 const key = (x, y, z) => `${x},${y},${z}`;
@@ -12,6 +13,7 @@ const FACE_OK = f => f==='E'||f==='W'||f==='N'||f==='S';
 
 export class World {
   constructor(canvas, platformSize = 51) {
+    this.canvas = canvas;
     this.blocks = new Map();
     this.meshes = new Map();
     this.displayLampKeys = new Set();
@@ -48,9 +50,43 @@ export class World {
     this.controls = new PointerLockControls(this.camera, document.body);
     this.controls.getObject().position.set(2, 1.8, 7);
     this.scene.add(this.controls.getObject());
+    this.interaction = new EventTarget();
+    this.fallbackAvailable = false;
+    this.fallbackActive = false;
+    this.fallbackDragging = false;
+    this.pendingFallback = null;
+    this.controls.addEventListener('lock', () => {
+      clearTimeout(this.pendingFallback);
+      this.fallbackActive = false;
+      this.interaction.dispatchEvent(new Event('lock'));
+    });
+    this.controls.addEventListener('unlock', () => {
+      if (!this.fallbackActive) this.interaction.dispatchEvent(new Event('unlock'));
+    });
+    document.addEventListener('pointerlockerror', () => {
+      this.fallbackAvailable = true;
+      this._activateFallback();
+    });
+    canvas.addEventListener('mousedown', (event) => {
+      if (!this.fallbackActive || !event.altKey || event.button !== 0) return;
+      this.fallbackDragging = true;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    addEventListener('mousemove', (event) => {
+      if (!this.fallbackDragging) return;
+      applyLookDelta(this.camera, -event.movementX * 0.003, -event.movementY * 0.003);
+    });
+    addEventListener('mouseup', (event) => {
+      if (event.button === 0) this.fallbackDragging = false;
+    });
     this.keys = {};
-    addEventListener('keydown', e => { if (document.activeElement.tagName!=='TEXTAREA') this.keys[e.code]=true; });
-    addEventListener('keyup',   e => { this.keys[e.code]=false; });
+    addEventListener('keydown', e => {
+      if (document.activeElement.tagName === 'TEXTAREA') return;
+      if (e.code.startsWith('Arrow')) e.preventDefault();
+      this.keys[e.code] = true;
+    });
+    addEventListener('keyup', e => { this.keys[e.code] = false; });
 
     addEventListener('resize', () => {
       this.camera.aspect = innerWidth/innerHeight;
@@ -61,9 +97,41 @@ export class World {
     this._loop();
   }
 
-  locked(){ return this.controls.isLocked; }
-  lock(){ this.controls.lock(); }
-  unlock(){ this.controls.unlock(); }
+  locked(){ return this.controls.isLocked || this.fallbackActive; }
+
+  _activateFallback() {
+    if (this.controls.isLocked || this.fallbackActive) return;
+    this.fallbackActive = true;
+    this.interaction.dispatchEvent(new Event('lock'));
+  }
+
+  lock() {
+    if (this.fallbackAvailable) {
+      this._activateFallback();
+      return;
+    }
+    this.controls.lock();
+    clearTimeout(this.pendingFallback);
+    this.pendingFallback = setTimeout(() => {
+      if (!this.controls.isLocked) {
+        this.fallbackAvailable = true;
+        this._activateFallback();
+      }
+    }, 200);
+  }
+
+  unlock() {
+    clearTimeout(this.pendingFallback);
+    if (this.controls.isLocked) {
+      this.controls.unlock();
+      return;
+    }
+    if (this.fallbackActive) {
+      this.fallbackActive = false;
+      this.fallbackDragging = false;
+      this.interaction.dispatchEvent(new Event('unlock'));
+    }
+  }
 
   _terrain(platformSize) {
     const size = (Number.isInteger(platformSize) && platformSize % 2 === 1 && platformSize >= 7 && platformSize <= 101)
@@ -301,7 +369,7 @@ export class World {
     if (pick && pick.block){ this.highlight.visible=true; this.highlight.position.set(...pick.block); }
     else this.highlight.visible=false;
     // movement
-    if (this.controls.isLocked){
+    if (this.locked()){
       const sp=6;
       const f=(this.keys.KeyW?1:0)-(this.keys.KeyS?1:0);
       const r=(this.keys.KeyD?1:0)-(this.keys.KeyA?1:0);
@@ -310,6 +378,8 @@ export class World {
       if (r) this.controls.moveRight(r*sp*dt);
       const o=this.controls.getObject(); o.position.y += u*sp*dt;
       if (o.position.y<1.6) o.position.y=1.6;
+      const [yaw, pitch] = lookDeltaFromKeys(this.keys, dt);
+      if (yaw || pitch) applyLookDelta(this.camera, yaw, pitch);
     }
   }
 

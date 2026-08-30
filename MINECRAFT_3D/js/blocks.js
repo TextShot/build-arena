@@ -40,6 +40,25 @@ export const HOTBAR_IDS = Object.freeze([
   'piston',
 ]);
 
+/** Number-row 1–9 → slots 0–8; 0 → slot 9 (tenth block). */
+export function hotbarSlotForDigit(digit) {
+  if (digit === 0) return 9;
+  if (Number.isInteger(digit) && digit >= 1 && digit <= 9) return digit - 1;
+  return null;
+}
+
+export function hotbarDigitForSlot(slot) {
+  if (slot === 9) return 0;
+  if (Number.isInteger(slot) && slot >= 0 && slot <= 8) return slot + 1;
+  return null;
+}
+
+export function heldHotbarLabel(blockId, slot) {
+  const name = BLOCKS[blockId].name;
+  const digit = hotbarDigitForSlot(slot);
+  return digit == null ? name : `${name} (${digit})`;
+}
+
 export const BLOCK_IDS = Object.keys(BLOCKS);
 
 const key = (x, y, z) => `${x},${y},${z}`;

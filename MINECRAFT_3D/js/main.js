@@ -1,10 +1,11 @@
 // main.js — First person Play Space + Inventory placement + WebMCP
 import { World } from "./world.js";
-import { BLOCKS, HOTBAR_IDS } from "./blocks.js";
+import { BLOCKS, HOTBAR_IDS, heldHotbarLabel, hotbarSlotForDigit } from "./blocks.js";
 import { registerPlaySpaceTools } from "./ai.js";
 import { iconCanvas } from "./textures.js";
 import { readAndClearHandoff, readInventory } from "./inventory.js";
 import { isPlacing, placeBlocksAtOrigin, startPlacement } from "./placement.js";
+import { LOOK_BY_ARROW } from "./look.js";
 import { installTwoBitAdder, syncTwoBitAdder } from "./two-bit-adder.js";
 
 const SPACE_LOAD_START_PERCENT = 13;
@@ -81,7 +82,7 @@ HOTBAR_IDS.forEach((id, i) => {
   s.className = "slot";
   const cv = iconCanvas(id);
   s.appendChild(cv);
-  s.title = BLOCKS[id].name;
+  s.title = heldHotbarLabel(id, i);
   s.onclick = () => selectSlot(i);
   bar.appendChild(s);
 });
@@ -103,15 +104,15 @@ function hotbarSlots() {
 function selectSlot(i) {
   selected = (i + HOTBAR_IDS.length) % HOTBAR_IDS.length;
   hotbarSlots().forEach((c, j) => c.classList.toggle("on", j === selected));
-  document.getElementById("held").textContent = BLOCKS[HOTBAR_IDS[selected]].name;
+  document.getElementById("held").textContent = heldHotbarLabel(HOTBAR_IDS[selected], selected);
 }
 selectSlot(0);
 
 addEventListener("keydown", (e) => {
-  if (e.code.startsWith("Digit")) {
-    const n = +e.code.slice(5);
-    if (n >= 1 && n <= HOTBAR_IDS.length) selectSlot(n - 1);
-  }
+  const digitMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
+  if (!digitMatch) return;
+  const slot = hotbarSlotForDigit(+digitMatch[1]);
+  if (slot != null && slot < HOTBAR_IDS.length) selectSlot(slot);
 });
 addEventListener("wheel", (e) => {
   if (world.locked()) selectSlot(selected + (e.deltaY > 0 ? 1 : -1));
@@ -134,14 +135,14 @@ blocker.addEventListener("click", (event) => {
   world.lock();
 });
 document.getElementById("game").addEventListener("click", () => world.lock());
-world.controls.addEventListener("lock", () => {
+world.interaction.addEventListener("lock", () => {
   hidePauseMenu();
   if (pendingPlacement) {
     startPlacement(world, pendingPlacement);
     pendingPlacement = null;
   }
 });
-world.controls.addEventListener("unlock", () => {
+world.interaction.addEventListener("unlock", () => {
   if (openingInventory || inventoryOpen()) return;
   showPauseMenu();
 });
@@ -189,6 +190,25 @@ const overlay = document.getElementById("inventory-overlay");
 function inventoryOpen() {
   return overlay && !overlay.hidden;
 }
+
+function setLookPadPressed(code, pressed) {
+  const direction = LOOK_BY_ARROW[code];
+  if (!direction) return;
+  document.querySelector(`#look-pad [data-look="${direction}"]`)?.classList.toggle("is-pressed", pressed);
+}
+
+addEventListener("keydown", (e) => {
+  if (!LOOK_BY_ARROW[e.code]) return;
+  if (document.activeElement?.tagName === "TEXTAREA") return;
+  if (inventoryOpen()) return;
+  setLookPadPressed(e.code, true);
+});
+addEventListener("keyup", (e) => setLookPadPressed(e.code, false));
+addEventListener("blur", () => {
+  for (const direction of Object.values(LOOK_BY_ARROW)) {
+    document.querySelector(`#look-pad [data-look="${direction}"]`)?.classList.remove("is-pressed");
+  }
+});
 
 function closeInventory() {
   if (!overlay) return;
