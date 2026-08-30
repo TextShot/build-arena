@@ -573,7 +573,9 @@ h3 { margin-bottom: 0.85rem; font-size: 1rem; }
 .notice-symbol { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; font-weight: 800; }
 
 .summary-total { color: var(--muted); }
-.material-counts, .activity-list { padding: 0; margin: 0; list-style: none; }
+.material-counts, .activity-list, .layers-list { padding: 0; margin: 0; list-style: none; }
+.layers-list li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); color: #bac7cf; font-size: 0.8rem; }
+.layers-list .layer-name { color: #d9e5ec; font-weight: 600; }
 .material-counts li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); color: #bac7cf; font-size: 0.8rem; text-transform: capitalize; }
 
 .json-preview { max-height: 34rem; padding: 0.75rem; overflow: auto; border: 1px solid var(--frost-border); border-radius: 0.7rem; color: #b8ddf2; background: rgb(8 16 14 / 52%); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font: 0.7rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }

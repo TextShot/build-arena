@@ -1,0 +1,75 @@
+import { describe, expect, it } from "vitest";
+
+import { createArenaEngine } from "../core/arena-world";
+import { registerArenaTools } from "./register-arena-tools";
+import { ARENA_TOOL_NAMES } from "./tool-schemas";
+import type { ModelContext, ToolDescriptor } from "./webmcp-types";
+
+/** Mimics the draft spec: registrations live until the provided signal aborts. */
+function fakeModelContext() {
+  const tools = new Map<string, ToolDescriptor>();
+  const modelContext: ModelContext = {
+    registerTool(tool, options) {
+      tools.set(tool.name, tool);
+      options?.signal?.addEventListener("abort", () => tools.delete(tool.name), { once: true });
+    },
+  };
+  return { modelContext, tools };
+}
+
+describe("registerArenaTools", () => {
+  it("is harmless when document.modelContext is missing", () => {
+    const engine = createArenaEngine();
+    const controller = new AbortController();
+
+    expect(registerArenaTools(engine, { signal: controller.signal })).toBe(false);
+    expect(() => controller.abort()).not.toThrow();
+  });
+
+  it("registers every frozen tool with read-only annotations and working handlers", async () => {
+    const engine = createArenaEngine();
+    const { modelContext, tools } = fakeModelContext();
+    const controller = new AbortController();
+
+    expect(registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(true);
+    expect([...tools.keys()].sort()).toEqual([...ARENA_TOOL_NAMES].sort());
+    expect(tools.get("get_arena_context")?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.get("set_blocks")?.annotations?.readOnlyHint).toBe(false);
+
+    const write = await tools.get("set_blocks")?.execute({
+      expectedRevision: 0,
+      edits: [{ action: "place", position: { x: 0, y: 1, z: 0 }, block: "stone" }],
+    });
+    expect(JSON.parse(write?.content[0]?.text ?? "{}")).toMatchObject({ success: true, revision: 1 });
+    expect(engine.getSummary().blockCount).toBe(1);
+  });
+
+  it("does not expose any resize tool to agents", () => {
+    const { modelContext, tools } = fakeModelContext();
+    const controller = new AbortController();
+    registerArenaTools(createArenaEngine(), { signal: controller.signal, modelContext });
+
+    expect([...tools.keys()].some((name) => name.includes("resize"))).toBe(false);
+  });
+
+  it("removes registrations when the AbortController aborts", () => {
+    const engine = createArenaEngine();
+    const { modelContext, tools } = fakeModelContext();
+    const controller = new AbortController();
+    registerArenaTools(engine, { signal: controller.signal, modelContext });
+    expect(tools.size).toBe(ARENA_TOOL_NAMES.length);
+
+    controller.abort();
+    expect(tools.size).toBe(0);
+  });
+
+  it("refuses to register on an already-aborted signal", () => {
+    const engine = createArenaEngine();
+    const { modelContext, tools } = fakeModelContext();
+    const controller = new AbortController();
+    controller.abort();
+
+    expect(registerArenaTools(engine, { signal: controller.signal, modelContext })).toBe(false);
+    expect(tools.size).toBe(0);
+  });
+});

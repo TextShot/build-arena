@@ -5,7 +5,9 @@ import { createArenaConfig, MAX_BUILD_HEIGHT, MAX_PLATFORM_SIZE } from "../core/
 import { createBlueprint, diffBlueprintBlocks } from "../core/blueprint";
 import type { Coordinate } from "../core/coordinates";
 import { createArenaEngine } from "../core/arena-world";
+import { collectObjectGroups } from "../core/arena-queries";
 import { ArenaRenderer } from "../render/three-renderer";
+import { registerArenaTools } from "../webmcp/register-arena-tools";
 import { type CameraPreset, type SidebarPanel, useUiStore } from "../state/ui-store";
 import {
   downloadBlueprintJson,
@@ -178,10 +180,26 @@ export function BuildArenaPage() {
     [selectedCoordinate],
   );
 
+  // WebMCP lifecycle: register once while mounted; aborting removes every
+  // page-scoped registration. Unsupported browsers keep the full human editor.
+  useEffect(() => {
+    const controller = new AbortController();
+    registerArenaTools(engine, {
+      signal: controller.signal,
+      hooks: {
+        onToolCall: (name, success, revision, payload) =>
+          addActivity({ actor: "agent", name, success, revision, payload }),
+        onRenderView: (view) => useUiStore.getState().setCameraPreset(view),
+      },
+    });
+    return () => controller.abort();
+  }, [addActivity, engine]);
+
   const currentBlocks = useMemo(
     () => engine.snapshotBlocks(),
     [engine, summary.revision],
   );
+  const objectGroups = useMemo(() => collectObjectGroups(currentBlocks), [currentBlocks]);
   const blueprint = createBlueprint(currentBlocks, { id: "arena-build", name: "Arena Build" });
   const blueprintText = serializeBlueprintJson(blueprint);
 
@@ -426,7 +444,18 @@ export function BuildArenaPage() {
                 {activeSidebarPanel === "layers" && (
                   <section aria-labelledby="layers-title">
                     <h3 id="layers-title">Layers</h3>
-                    <p className="empty-state">No layers yet</p>
+                    {objectGroups.length === 0 ? (
+                      <p className="empty-state">No layers yet</p>
+                    ) : (
+                      <ul className="layers-list">
+                        {objectGroups.map((group) => (
+                          <li key={group.objectId}>
+                            <span className="layer-name">{group.objectId}</span>
+                            <span className="layer-meta">{group.block} × {group.count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </section>
                 )}
 
