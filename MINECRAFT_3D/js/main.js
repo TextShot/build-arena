@@ -323,7 +323,7 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 
 document.getElementById("to-arena").addEventListener("click", (event) => {
   event.stopPropagation();
-  location.assign("/");
+  location.assign(import.meta.env.BASE_URL);
 });
 document.getElementById("switch-mode")?.addEventListener("click", (event) => {
   event.stopPropagation();

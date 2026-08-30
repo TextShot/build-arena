@@ -309,7 +309,7 @@ export function BuildArenaPage() {
       setStatusMessage(written.error);
       return;
     }
-    window.location.assign("/MINECRAFT_3D/index.html");
+    window.location.assign(`${import.meta.env.BASE_URL}MINECRAFT_3D/index.html`);
   };
 
   const resizePlatform = (nextSize: number) => {

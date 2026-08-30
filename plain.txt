@@ -49,7 +49,7 @@ Task 4: Codex integration — serial
 - Plan stops after Phase 6. Phase 7 game/inventory and Phase 8 redstone get separate plans.
 - Parallel sub- agents workers.
 - Codex is core architect: contracts, merge order, conflict resolution and final review.
-- Mayank runs verification commands; workers write tests and report commands.
+-  runs verification commands; workers write tests and report commands.
 - No parallel work starts until the current staged/unstaged Phase 4 changes are clean and committed.
 
 ## Worktree rules
@@ -118,7 +118,7 @@ changed file and report verification commands and exact git status.
 - Exported JSON round-trips with negative X/Z coordinates.
 - Invalid import changes neither blocks nor revision.
 - BuildArenaPage contains no schema, parser or snapshot-diff implementation.
-- Worktree is reviewed, verified by Mayank and committed before Phase 5.
+- Worktree is reviewed, verified by  and committed before Phase 5.
 
 ---
 
@@ -363,7 +363,7 @@ the documented migration function.
 
 ## Verification and later phases
 
-Mayank runs at each gate:
+ runs at each gate:
 
 ```bash
 npm test -- src/core src/storage src/schemas src/webmcp src/render src/state

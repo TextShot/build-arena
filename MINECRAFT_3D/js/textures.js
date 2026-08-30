@@ -1,4 +1,4 @@
-// textures.js — Block materials: PNGs live in repo `assets /assets/` (space in the folder name).
+// textures.js — Block materials: PNGs live in repo `assets/assets/`.
 import * as THREE from '../vendor/three.module.js';
 import { BLOCKS } from './blocks.js';
 

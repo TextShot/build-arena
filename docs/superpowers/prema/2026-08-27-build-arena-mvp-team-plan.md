@@ -23,7 +23,7 @@
 - Blueprint interchange is versioned JSON. The compact run-string DSL is deferred until shape operations in Phase 6.
 - No worker may add backend MCP transports, arbitrary code execution, fluid simulation, chunks, or greedy meshing.
 - Reference images exist in a directory literally named `assets ` (with a trailing space). They confirm the 7x7 X/Z grid, Y-height convention, and sidebar concept, but that directory name is not a valid `/assets/...` runtime path; keep core work independent and normalize the asset path during renderer/UI work.
-- Mayank runs broad verification; workers provide focused copy-paste commands and record expected results.
+-  runs broad verification; workers provide focused copy-paste commands and record expected results.
 
 ---
 
@@ -251,7 +251,7 @@ interface ArenaEngine {
 
 **Consumes:** Tasks 1–5.
 
-**Produces:** A short concise manual checklist Mayank can run. No automated integration-flow test file.
+**Produces:** A short concise manual checklist  can run. No automated integration-flow test file.
 
 - [ ] Document one shared flow for manual QA: human edit → agent stale-write rejection → agent re-read → agent edit → undo → export → clear → import.
 - [ ] Verify the platform remains immutable through UI, import, and WebMCP paths.
@@ -259,7 +259,7 @@ interface ArenaEngine {
 - [ ] Verify the app remains fully usable when `document.modelContext` is absent.
 - [ ] Check keyboard access, text labels, contrast, and non-colour validation feedback.
 - [ ] Review for direct writes to Zustand, Three.js, or the sparse map outside the core.
-- [ ] Give Mayank focused commands for the three Vitest files, type checking, build, and browser QA; do not run broad checks without his request.
+- [ ] Give  focused commands for the three Vitest files, type checking, build, and browser QA; do not run broad checks without his request.
 
 **Gate:** Every MVP success criterion in `docs/BUILD_ARENA_PLAN.md` has core/blueprint/WebMCP test evidence or an item in `docs/MVP_MANUAL_QA.md`, and no unresolved critical risk.
 

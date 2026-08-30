@@ -1,11 +1,18 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-// Folder is literally `assets /assets` (space after "assets"). Relative aliases
-// are treated as npm packages; Vite needs an absolute filesystem path.
-const blockPngDir = decodeURI(new URL("./assets /assets", import.meta.url).pathname);
+// Block PNGs live in `assets/assets`. Relative aliases are treated as npm
+// packages; Vite needs an absolute filesystem path.
+const blockPngDir = decodeURI(new URL("./assets/assets", import.meta.url).pathname);
+
+// Local `npm run dev` / `npm run build` stay at `/`. GitHub Pages is a project
+// site: https://USER.github.io/build-arena/ so CI must prefix every asset.
+const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+const pagesRepo = env?.GITHUB_REPOSITORY?.split("/")[1] ?? "build-arena";
+const base = env?.GITHUB_PAGES === "true" ? `/${pagesRepo}/` : "/";
 
 export default defineConfig({
+  base,
   plugins: [react()],
   resolve: {
     alias: [{ find: "@block-png", replacement: blockPngDir }],

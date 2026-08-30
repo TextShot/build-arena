@@ -106,4 +106,4 @@ This lets an agent inspect logical components rather than thousands of unrelated
 - Hover/selection does not drift after resize.
 - Validation locations highlight the right block.
 
-Mayank prefers to run verification. Implementation tasks should provide focused copy-paste commands rather than automatically running long builds or broad test suites.
+ prefers to run verification. Implementation tasks should provide focused copy-paste commands rather than automatically running long builds or broad test suites.
