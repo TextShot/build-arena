@@ -65,6 +65,9 @@ describe("arena tool schemas", () => {
     expect(validate({})).toBe(false);
     expect(validate({ names: [] })).toBe(false);
     expect(validate({ names: ["set_blocks"] })).toBe(true);
+    expect(validate({ names: ["set_blocks"], detail: "compact" })).toBe(true);
+    expect(validate({ names: ["set_blocks"], detail: "schema" })).toBe(true);
+    expect(validate({ names: ["set_blocks"], detail: "full" })).toBe(false);
     expect(validate({ names: tenNames })).toBe(true);
     expect(validate({ names: [...tenNames, "undo_build_change"] })).toBe(false);
     expect(validate({ names: ["set_blocks", "set_blocks"] })).toBe(false);

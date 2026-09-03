@@ -13,11 +13,11 @@ describe("WebMCP host catalog payload", () => {
     expect(byName.get("list_tools")?.inputSchema).toBe(ARENA_TOOL_SCHEMAS.list_tools);
     expect(byName.get("describe_tools")?.inputSchema).toBe(ARENA_TOOL_SCHEMAS.describe_tools);
     expect(byName.get("set_blocks")?.description).toContain(
-      'First call describe_tools({names:["set_blocks"]}).',
+      'First call describe_tools({names:["set_blocks"],detail:"compact"}).',
     );
     expect(byName.get("set_blocks")?.inputSchema).toEqual({
       type: "object",
-      description: "Full args: describe_tools({names}).",
+      description: 'Args: describe_tools({names}); full schema: detail="schema".',
       additionalProperties: true,
       properties: {},
     });

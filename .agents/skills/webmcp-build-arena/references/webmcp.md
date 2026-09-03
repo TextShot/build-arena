@@ -22,6 +22,16 @@ Currently, WebMCP **only supports Tools**. It does not support the "Resources" o
 * **Clean Up**: Always use `AbortSignal` to unregister tools when pages transition or resources are released to avoid leaks and collisions. Do not use `unregisterTool`.
 * **Web Development Best Practices**: WebMCP tools run as client-side JavaScript in the browser tab. They must adhere to regular web development best practices (e.g., keeping secrets out of client-side code, accessing backend databases through secure API layers, and using Web Workers, WASM, or WebGPU for heavy compute).
 
+## Chrome security and reliability guidance
+
+- Keep tools same-origin by default. Add `exposedTo` only for explicitly reviewed HTTPS origins.
+- Set `readOnlyHint` truthfully. Set `untrustedContentHint` when a result contains arbitrary external or user-generated text; bounded numbers, enums, and sanitized identifiers do not need it.
+- Validate in the handler even when the schema is strict. Schemas guide agents but are not the security boundary.
+- Keep descriptions and outputs concise. Chrome currently recommends up to 500 characters per tool description, 150 per parameter description, and roughly 1.5K characters per individual output. Large structured reads should use filters, pagination, or an explicitly requested detailed mode instead of silent truncation.
+- Return recovery-oriented errors for invalid state or parameters; do not expose raw internal errors.
+
+Primary references: [Secure tools](https://developer.chrome.com/docs/ai/webmcp/secure-tools), [Best practices](https://developer.chrome.com/docs/ai/webmcp/best-practices), [Build tools](https://developer.chrome.com/docs/ai/webmcp/build-tools).
+
 ### When to Discourage WebMCP
 * **High-Risk Actions without Guardrails**: Avoid auto-submitting tools for destructive or irreversible actions (e.g., deleting data) unless the UI requires manual user confirmation outside the agent's control.
 * **Hyper-Dynamic State**: If data changes faster than the agent can react, it may work with stale context.

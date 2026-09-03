@@ -30,6 +30,9 @@ describe("arena tool handlers", () => {
     expect(context.revision).toBe(0);
     expect(context.toolUse).toEqual(expect.stringContaining("list_tools"));
     expect(summary.revision).toBe(0);
+    expect(summary.counts).toEqual({});
+    expect(summary.occupiedBounds).toBeNull();
+    expect(summary.objectGroups).toBeUndefined();
     expect(engine.getContext().revision).toBe(0);
   });
 
@@ -81,7 +84,12 @@ describe("arena tool handlers", () => {
 
     expect(result).toMatchObject({ success: true, affectedBlocks: 5, objectId: "oak_planks_1" });
     const summary = payload(handlers.get_build_summary({}));
-    expect(summary.objectGroups).toEqual([{ objectId: "oak_planks_1", block: "oak_planks", count: 5 }]);
+    expect(summary.counts).toEqual({ oak_planks: 5 });
+    expect(summary.objectGroups).toBeUndefined();
+    const summaryWithGroups = payload(handlers.get_build_summary({ includeObjectGroups: true }));
+    expect(summaryWithGroups.objectGroups).toEqual([
+      { objectId: "oak_planks_1", block: "oak_planks", count: 5 },
+    ]);
   });
 
   it("generate_shape dryRun reports without mutating", () => {
@@ -176,7 +184,8 @@ describe("arena tool handlers", () => {
   it("lists a short catalog and describes unique tools in requested order", () => {
     const { handlers } = testHandlers();
     const list = payload(handlers.list_tools({}));
-    expect(list.loop).toEqual(expect.stringContaining("lock"));
+    expect(list.loop).toEqual(expect.stringContaining("returned revision"));
+    expect(list.loop).toEqual(expect.stringContaining("after an error re-read state"));
     expect(list.tools).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "generate_shape", when: expect.any(String), ex: expect.any(String) }),
     ]));
@@ -190,8 +199,21 @@ describe("arena tool handlers", () => {
     expect(whenByName.transform_region).toContain("existing region");
     expect(whenByName.render_build_views).toContain("no block data");
 
-    const described = payload(handlers.describe_tools({ names: ["generate_shape", "set_blocks"] }));
-    expect(described.tools).toHaveLength(2);
+    const compact = payload(handlers.describe_tools({
+      names: ["generate_shape", "set_blocks"],
+      detail: "compact",
+    }));
+    expect(compact.tools).toEqual([
+      expect.objectContaining({ name: "generate_shape", args: expect.any(String), example: expect.any(String) }),
+      expect.objectContaining({ name: "set_blocks", args: expect.any(String), example: expect.any(String) }),
+    ]);
+    expect((compact.tools as Record<string, unknown>[]).every(
+      (tool) => tool.inputSchema === undefined && tool.when === undefined,
+    )).toBe(true);
+
+    const described = payload(handlers.describe_tools({
+      names: ["generate_shape", "set_blocks"],
+    }));
     expect(described.tools).toEqual([
       expect.objectContaining({
         name: "generate_shape",
