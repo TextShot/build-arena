@@ -15,7 +15,7 @@ export type ToolCallResult = Readonly<{
 
 export type ToolAnnotations = Readonly<{
   readOnlyHint?: boolean;
-  destructiveHint?: boolean;
+  untrustedContentHint?: boolean;
 }>;
 
 export type ToolDescriptor = Readonly<{

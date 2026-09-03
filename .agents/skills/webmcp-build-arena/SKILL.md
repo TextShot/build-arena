@@ -64,7 +64,7 @@ One tool = one full execute schema + one `execute` wrapper + one `registerTool` 
 - Reads: empty or filter object. Arena mutations include `expectedRevision`; UI-only lock state does not change the arena revision.
 - Optional `dryRun` on large writes.
 
-**Build Arena / Codex Browser optimization only:** keep `list_tools` and `describe_tools` fully described at registration. Other host descriptors use the shared permissive stub from `host-catalog-payload.ts`; `describe_tools({names})` returns full schemas for 1-10 unique names. Handlers must still validate every call with `ARENA_TOOL_SCHEMAS`. Never use the permissive host stub for execute-time validation, and do not copy this optimization to another WebMCP host without measuring and testing that host.
+**Build Arena / Codex Browser optimization only:** keep `list_tools` and `describe_tools` fully described at registration. Other host descriptors use the shared permissive stub from `host-catalog-payload.ts`; `describe_tools({names})` defaults to full schemas for backward compatibility, while `detail:"compact"` returns only concise args/examples. Handlers must still validate every call with `ARENA_TOOL_SCHEMAS`. Never use the permissive host stub for execute-time validation, and do not copy this optimization to another WebMCP host without measuring and testing that host.
 
 Fresh-agent reliability is not established by unit tests or by an informed agent reusing the same task. Before shipping changes to this flow, open a fresh Codex task with no prior schema context and verify it follows `list_tools` → `describe_tools({names})` → target tools. Until that passes, describe the host stubs as experimental rather than proven reliable.
 
@@ -139,7 +139,7 @@ Build these, and only these, until they work. Details and schemas: `references/t
 | # | Tool | Kind | Engine call |
 | --- | --- | --- | --- |
 | 1 | `list_tools` | read | short names, use cases, examples |
-| 2 | `describe_tools` | read | 1-10 unique full input schemas + examples |
+| 2 | `describe_tools` | read | compact args/examples or 1-10 full schemas |
 | 3 | `get_arena_context` | read | config + block catalogue + revision |
 | 4 | `get_build_summary` | read | counts, occupied bounds, revision |
 | 5 | `query_blocks` | read | region / layer / type filter |
@@ -155,8 +155,10 @@ Agent loop those tools should support. Arena mutations reject unless the manual 
 
 ```text
 set_manual_edit_lock(true) → get_arena_context → get_build_summary → query/slice
-        → one bounded write → check revision/bounds → query again
-        → render only if needed → set_manual_edit_lock(false)
+        → chain successful writes using each returned revision → final summary
+        → set_manual_edit_lock(false)
+
+After any write error: stop the chain, re-read state/revision, then decide whether to retry.
 ```
 
 ## 8. Check before you stop
@@ -165,7 +167,8 @@ set_manual_edit_lock(true) → get_arena_context → get_build_summary → query
 - [ ] Tool is a thin wrapper (no extra voxel logic)
 - [ ] Full execute schema is narrow, described, `additionalProperties: false`
 - [ ] Discovery tools retain real host schemas; other host schemas use the shared stub
-- [ ] `describe_tools` requires 1-10 unique names and preserves their order in the response
+- [ ] `describe_tools` requires 1-10 unique names, defaults to schema, and omits full schemas only for `detail:"compact"`
+- [ ] `get_build_summary` omits object groups unless `includeObjectGroups:true`
 - [ ] Compact host descriptors remain within the named byte budget
 - [ ] A fresh Codex task follows discovery before calling a stubbed tool; otherwise reliability remains unverified
 - [ ] Read tools have `readOnlyHint: true`

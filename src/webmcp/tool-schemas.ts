@@ -96,7 +96,7 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   },
   describe_tools: {
     type: "object",
-    description: "Detailed args, examples, and full input schemas for 1-10 unique tools.",
+    description: "Args and examples for 1-10 unique tools. detail defaults to schema for backward compatibility; use compact to omit full JSON Schemas.",
     additionalProperties: false,
     required: ["names"],
     properties: {
@@ -111,6 +111,11 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
           enum: DESCRIBE_TOOLS_NAME_ENUM,
         },
       },
+      detail: {
+        type: "string",
+        enum: ["compact", "schema"],
+        description: "schema returns usage guidance and the full inputSchema and is the default. compact returns only name, args, and example.",
+      },
     },
   },
   get_arena_context: {
@@ -121,9 +126,14 @@ export const ARENA_TOOL_SCHEMAS = Object.freeze({
   },
   get_build_summary: {
     type: "object",
-    description: "Census of placed blocks: revision, counts, occupied bounds, and object groups. Use this after context and after writes; it does not list every cell.",
+    description: "Compact build census: revision, block count, non-zero material counts, and occupied bounds. Object groups are omitted by default; request them only for Layers or group debugging. Use before planning, at the end, or after an error instead of after every successful write.",
     additionalProperties: false,
-    properties: {},
+    properties: {
+      includeObjectGroups: {
+        type: "boolean",
+        description: "When true, include objectGroups. Defaults to false to keep the response compact.",
+      },
+    },
   },
   query_blocks: {
     type: "object",

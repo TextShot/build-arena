@@ -95,7 +95,7 @@ export function createArenaToolHandlers(
         limits: context.limits,
         manualEditLock: hooks.manualEditLock?.getSnapshot() ?? { locked: false, expiresAt: null },
         sizeControl: "Arena platform/height sizing is human-only via the UI sliders; agents read bounds but cannot resize",
-        toolUse: "Call list_tools for the short catalog. Call describe_tools with 1-10 unique names for full args and examples.",
+        toolUse: "Call list_tools first. Use describe_tools compact for args/examples and schema only when full validation detail is needed. Chain successful writes from each returned revision; re-read state after errors, then get one final summary.",
       });
     }),
 
@@ -103,10 +103,20 @@ export function createArenaToolHandlers(
 
     describe_tools: run("describe_tools", (args) => {
       const names = args.names as ArenaToolName[];
-      return jsonToolResult(describeToolsPayload(names, ARENA_TOOL_SCHEMAS));
+      const detail = args.detail === "compact" ? "compact" : "schema";
+      return jsonToolResult(describeToolsPayload(names, ARENA_TOOL_SCHEMAS, detail));
     }),
 
-    get_build_summary: run("get_build_summary", () => jsonToolResult(engine.getSummary())),
+    get_build_summary: run("get_build_summary", (args) => {
+      const summary = engine.getSummary();
+      const counts = Object.fromEntries(
+        Object.entries(summary.counts).filter(([, count]) => count > 0),
+      );
+      const { objectGroups, ...compactSummary } = summary;
+      return jsonToolResult(args.includeObjectGroups === true
+        ? { ...compactSummary, counts, objectGroups }
+        : { ...compactSummary, counts });
+    }),
 
     query_blocks: run("query_blocks", (args) => jsonToolResult(engine.queryBlocks(args))),
 

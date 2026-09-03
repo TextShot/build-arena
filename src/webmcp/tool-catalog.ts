@@ -1,9 +1,9 @@
 /** Short cards for list_tools. Keep strings tiny — this payload is meant to be cheap. */
 export const LIST_TOOL_CARDS = Object.freeze([
   Object.freeze({ name: "list_tools", when: "start here: choose tools + tiny examples", ex: "{}" }),
-  Object.freeze({ name: "describe_tools", when: "before stubbed calls: full args for 1-10 unique tools", ex: "{names:[\"set_blocks\",\"generate_shape\"]}" }),
+  Object.freeze({ name: "describe_tools", when: "before stubbed calls: compact args or full schemas", ex: "{names:[\"set_blocks\",\"generate_shape\"],detail:\"compact\"}" }),
   Object.freeze({ name: "get_arena_context", when: "first read: bounds, revision, block ids, limits, lock", ex: "{}" }),
-  Object.freeze({ name: "get_build_summary", when: "totals, occupied bounds, object groups; no coordinates", ex: "{}" }),
+  Object.freeze({ name: "get_build_summary", when: "planning/final totals + bounds; groups optional", ex: "{}" }),
   Object.freeze({ name: "query_blocks", when: "exact coordinates, state, objectId; sparse/paginated checks", ex: "{layerY:1,limit:50}" }),
   Object.freeze({ name: "get_build_slices", when: "dense 2D plane for layer or side pattern checks", ex: "{axis:\"y\",index:1}" }),
   Object.freeze({ name: "set_manual_edit_lock", when: "required before mutations; release after success or failure", ex: "{locked:true}" }),
@@ -15,7 +15,7 @@ export const LIST_TOOL_CARDS = Object.freeze([
 ]);
 
 export const LIST_TOOLS_LOOP =
-  "lock → context → summary → query/slice → one write → re-read → unlock";
+  "lock → context → summary → query/slice → chain successful writes using returned revision → final summary → unlock; after an error re-read state";
 
 type ListCard = (typeof LIST_TOOL_CARDS)[number];
 
@@ -27,12 +27,12 @@ const DETAILED_BY_NAME: Readonly<Record<ListCard["name"], Readonly<{
   list_tools: {
     args: "{}",
     example: "{}",
-    when: "Use first to choose the smallest useful tool set. Returns compact names, decision guidance, and tiny examples; use describe_tools next for full schemas.",
+    when: "Use first to choose the smallest useful tool set. Returns compact names, decision guidance, and tiny examples; call describe_tools with detail:\"schema\" for full schemas.",
   },
   describe_tools: {
-    args: "{names[1..10 unique]}",
-    example: "{names:[\"generate_shape\",\"set_blocks\"]}",
-    when: "Use before calling selected stubbed tools. Returns full input schemas and examples for 1-10 unique names in requested order.",
+    args: "{names[1..10 unique],detail?:compact|schema}",
+    example: "{names:[\"generate_shape\",\"set_blocks\"],detail:\"compact\"}",
+    when: "Use before selected stubbed tools. compact returns args/examples; schema also returns full schemas for complex or failed calls.",
   },
   get_arena_context: {
     args: "{}",
@@ -40,9 +40,9 @@ const DETAILED_BY_NAME: Readonly<Record<ListCard["name"], Readonly<{
     when: "Use at the start of arena work to learn playable bounds, current revision, supported block/state types, limits, and lock status. Choose get_build_summary for build totals.",
   },
   get_build_summary: {
-    args: "{}",
+    args: "{includeObjectGroups?}",
     example: "{}",
-    when: "Use before planning and after writes when you need revision, material totals, occupied bounds, or object-group totals. Choose query_blocks for exact coordinates.",
+    when: "Use before planning, at the end, or after an error for revision, material totals, and occupied bounds. counts includes only present materials; absent means zero. Object groups are omitted unless includeObjectGroups=true. Choose query_blocks for exact coordinates.",
   },
   query_blocks: {
     args: "{region?,layerY?,blockType?,limit?,offset?}",
@@ -93,13 +93,16 @@ export function listToolsPayload(): Readonly<{ loop: string; tools: typeof LIST_
 export function describeToolsPayload(
   names: readonly ListCard["name"][],
   inputSchemas: Readonly<Record<ListCard["name"], object>>,
+  detail: "compact" | "schema" = "schema",
 ): Readonly<{ tools: readonly object[] }> {
   return Object.freeze({
-    tools: Object.freeze(names.map((name) => Object.freeze({
-      name,
-      ...DETAILED_BY_NAME[name],
-      inputSchema: inputSchemas[name],
-    }))),
+    tools: Object.freeze(names.map((name) => {
+      const tool = DETAILED_BY_NAME[name];
+      const compact = { name, args: tool.args, example: tool.example };
+      return Object.freeze(detail === "schema"
+        ? { ...compact, when: tool.when, inputSchema: inputSchemas[name] }
+        : compact);
+    })),
   });
 }
 
